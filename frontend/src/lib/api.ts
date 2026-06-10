@@ -51,9 +51,51 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return res.json() as Promise<T>;
 }
 
+export type TxnPage = {
+  items: {
+    id: string;
+    value_date: string;
+    amount_paise: number;
+    direction: string;
+    narration: string;
+    counterparty_hint: string | null;
+    match_status: string;
+  }[];
+  next_cursor: string | null;
+  counts: Record<string, number>;
+};
+
+export function formatINR(amountPaise: number): string {
+  const rupees = amountPaise / 100;
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+  }).format(rupees);
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  transactions: (statusFilter?: string) =>
+    request<TxnPage>(
+      "GET",
+      `${apiPaths.GET_BOOKS_TRANSACTIONS}${statusFilter ? `?status_filter=${statusFilter}` : ""}`,
+    ),
+  importStatement: async (file: File): Promise<{ document_id: string; run_id: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_IMPORTS}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.detail ?? `upload failed (${res.status})`);
+    }
+    return res.json();
+  },
   me: () => request<{ email: string; active_tenant_id: string; role: string }>("GET", apiPaths.GET_ME),
   startRun: (graph: string, params: Record<string, unknown> = {}) =>
     request<RunOut>("POST", apiPaths.POST_AGENT_RUNS, { graph, params }),

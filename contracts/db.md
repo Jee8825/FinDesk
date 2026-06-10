@@ -1,5 +1,11 @@
 # App-DB Contract — v1
 
+> **Implementation status:** migrations `0001` (identity + agent runs) and
+> `0002` (books: counterparties, bank_accounts, bank_transactions, invoices,
+> matches, ledger_entries, audit_log, documents) are live. Phase-1 tables carry
+> the subset of columns their features need (e.g. `invoices` gains gst/tds/irn
+> in Phase 3); this file describes the target shape.
+
 Human-readable schema reference for the app database (Postgres 16).
 Authoritative DDL is the Alembic migration chain in
 `backend/app/db/migrations/`; this file is the reviewed summary that changes

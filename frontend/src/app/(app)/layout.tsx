@@ -6,6 +6,8 @@ import { useEffect } from "react";
 
 import { clearTokens, getToken } from "@/lib/api";
 
+import { Providers } from "../providers";
+
 // Page map from docs/architecture/07-frontend.md §1 — placeholders until each
 // feature phase lands its surface.
 const NAV = [
@@ -60,7 +62,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Sign out
         </button>
       </aside>
-      <main className="flex-1 p-8">{children}</main>
+      <main className="flex-1 p-8">
+        <Providers>{children}</Providers>
+      </main>
     </div>
   );
 }

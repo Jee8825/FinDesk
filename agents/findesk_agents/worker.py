@@ -15,10 +15,14 @@ import signal
 import redis.asyncio as aioredis
 from findesk_shared import uuid7
 
+from findesk_agents.backend_client import BackendClient
 from findesk_agents.config import get_settings
 from findesk_agents.events import RedisEventEmitter
 from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
+from findesk_agents.graphs.reconciliation import graph as recon_graph
+from findesk_agents.graphs.reconciliation.state import ReconState
+from findesk_agents.memoryclient import MemoryClient
 
 log = logging.getLogger("findesk.worker")
 
@@ -43,6 +47,21 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
             )
             final = await ping_graph.run(state)
             await emitter.done("succeeded", summary=final.summary)
+        elif event.startswith("job.reconciliation."):
+            backend = BackendClient()
+            try:
+                recon_state = ReconState(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    document_id=payload["document_id"],
+                    emitter=emitter,
+                    backend=backend,
+                    memory=MemoryClient(),
+                )
+                recon_final = await recon_graph.run(recon_state)
+                await emitter.done("succeeded", summary=recon_final.summary)
+            finally:
+                await backend.aclose()
         else:
             log.warning("no graph for event %s", event)
             await emitter.done("failed", summary=f"unknown job kind {event}")

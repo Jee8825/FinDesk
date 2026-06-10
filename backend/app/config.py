@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     recall_base_url: str = "http://localhost:8000"
 
     jwt_secret: str = "dev-only-secret"
+    internal_api_token: str = "dev-internal-token"  # worker ↔ backend internal API
+    upload_dir: str = "var/uploads"  # dev only; object storage in staging/prod
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_days: int = 14
 
