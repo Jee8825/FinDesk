@@ -42,6 +42,23 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def latest_gap(self, tenant_id: str) -> dict[str, Any] | None:
+        resp = await self._client.get(
+            "/internal/forecast/latest-gap", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json().get("gap")
+
+    async def persist_wc_actions(
+        self, tenant_id: str, run_id: str, options: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/wc-actions",
+            json={"tenant_id": tenant_id, "run_id": run_id, "options": options},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def forecast_context(self, tenant_id: str) -> dict[str, Any]:
         resp = await self._client.get(
             "/internal/forecast/context", params={"tenant_id": tenant_id}

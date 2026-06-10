@@ -2,7 +2,6 @@
 // (docs/team/implementation-roadmap.md). Each gets its real feature folder
 // under src/features/<area> when its phase starts.
 const SECTIONS: Record<string, { title: string; phase: string; blurb: string }> = {
-  actions: { title: "Working capital", phase: "Phase 4", blurb: "Costed, ranked actions: TReDS, collections, re-timing." },
 };
 
 export function generateStaticParams() {

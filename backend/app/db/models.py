@@ -219,6 +219,27 @@ class ForecastLine(TimestampedTenanted, Base):
     drivers: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
 
 
+class WcAction(TimestampedTenanted, Base):
+    """B4: one ranked working-capital option (recommend-only until approved)."""
+
+    __tablename__ = "wc_actions"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(36))
+    kind: Mapped[str] = mapped_column(String(10), index=True)  # treds|collect|retime
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), index=True)
+    invoice_number: Mapped[str] = mapped_column(String(50))
+    client: Mapped[str] = mapped_column(String(200))
+    unlock_paise: Mapped[int] = mapped_column(BigInteger)
+    cost_paise: Mapped[int] = mapped_column(BigInteger)
+    rank: Mapped[int] = mapped_column(Integer)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # proposed | approval_requested | executed | rejected | stale
+    status: Mapped[str] = mapped_column(String(20), default="proposed", index=True)
+    approval_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    execution: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
 class StatutoryClock(TimestampedTenanted, Base):
     """B2: one MSME-Act 45-day clock per open receivable (engine-computed)."""
 

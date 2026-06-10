@@ -28,6 +28,8 @@ from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
 from findesk_agents.graphs.reconciliation.state import ReconState
+from findesk_agents.graphs.working_capital import graph as wc_graph
+from findesk_agents.graphs.working_capital.state import WorkingCapitalState
 from findesk_agents.memoryclient import MemoryClient
 
 log = logging.getLogger("findesk.worker")
@@ -53,6 +55,20 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
             )
             final = await ping_graph.run(state)
             await emitter.done("succeeded", summary=final.summary)
+        elif event.startswith("job.working_capital."):
+            backend = BackendClient()
+            try:
+                wc_state = WorkingCapitalState(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    emitter=emitter,
+                    backend=backend,
+                    memory=MemoryClient(),
+                )
+                wc_final = await wc_graph.run(wc_state)
+                await emitter.done("succeeded", summary=wc_final.summary)
+            finally:
+                await backend.aclose()
         elif event.startswith("job.forecast.") or event.startswith("job.cash_forecast."):
             backend = BackendClient()
             try:
