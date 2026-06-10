@@ -24,6 +24,7 @@ idempotent on `id`.
 
 | event | payload |
 |---|---|
+| `job.ping.requested@v1` | `{ params: {} }` — Phase-0 pulse check (Planner→Executor→Critic no-op) |
 | `job.reconciliation.requested@v1` | `{ source: "ingestion"\|"schedule"\|"user", bank_account_id? }` |
 | `job.anomaly_scan.requested@v1` | `{ period: "YYYY-MM" }` |
 | `job.collections.requested@v1` | `{ }` |
