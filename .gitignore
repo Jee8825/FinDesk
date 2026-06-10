@@ -1,0 +1,30 @@
+# env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+*.egg-info/
+
+# node / next
+node_modules/
+.next/
+out/
+coverage/
+
+# machine-specific
+docker-compose.override.yml
+.DS_Store
+.idea/
+.vscode/
+
+# data
+*.local.db

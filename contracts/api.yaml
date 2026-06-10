@@ -1,0 +1,107 @@
+# FinDesk Backend API — OpenAPI 3.1 (v1 skeleton)
+# Source of truth for the REST + SSE surface. `make contracts` generates the
+# Pydantic models (shared/py) and the TS client (shared/ts) from this file.
+# Endpoint set mirrors docs/architecture/06-backend-api.md §2 — flesh out
+# schemas as features land; CI lints this file and fails on generator drift.
+
+openapi: 3.1.0
+info:
+  title: FinDesk API
+  version: 1.0.0
+  description: >
+    Control plane for the autonomous CFO. All endpoints are tenant-scoped via
+    the access token's active-tenant claim. Money is integer paise; timestamps
+    UTC ISO-8601; IDs UUIDv7.
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: books
+  - name: agent
+  - name: conflicts
+  - name: anomalies
+  - name: approvals
+  - name: cash
+  - name: why
+  - name: webhooks
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Email+password login (optional TOTP step-up)
+      responses: { "200": { description: tokens } }
+  /auth/refresh:
+    post: { tags: [auth], security: [], summary: Rotate refresh token, responses: { "200": { description: tokens } } }
+  /me:
+    get: { tags: [auth], summary: Current user + memberships, responses: { "200": { description: profile } } }
+  /tenants/{tenant_id}/switch:
+    post: { tags: [auth], summary: Switch active tenant (CA console), responses: { "200": { description: new token } } }
+
+  /books/transactions:
+    get: { tags: [books], summary: Normalized bank feed (cursor paginated), responses: { "200": { description: page } } }
+  /books/imports:
+    post: { tags: [books], summary: Upload statement/export file → 202 + run_id, responses: { "202": { description: queued } } }
+  /books/exceptions:
+    get: { tags: [books], summary: Unmatched residuals queue, responses: { "200": { description: page } } }
+  /reports/month-end:
+    get: { tags: [books], summary: Month-end pack for a period, responses: { "200": { description: pack } } }
+
+  /agent/runs:
+    post: { tags: [agent], summary: Start a graph run (kind + params) → run_id, responses: { "202": { description: queued } } }
+    get: { tags: [agent], summary: List runs, responses: { "200": { description: page } } }
+  /agent/runs/{run_id}:
+    get: { tags: [agent], summary: Run status + steps, responses: { "200": { description: run } } }
+  /agent/runs/{run_id}/stream:
+    get:
+      tags: [agent]
+      summary: SSE stream of run events (shapes in contracts/events.md)
+      responses: { "200": { description: text/event-stream } }
+  /agent/runs/{run_id}/cancel:
+    post: { tags: [agent], summary: Cancel a run, responses: { "200": { description: cancelled } } }
+
+  /conflicts:
+    get: { tags: [conflicts], summary: Conflict cards (filter by status), responses: { "200": { description: page } } }
+  /conflicts/{conflict_id}/resolve:
+    post: { tags: [conflicts], summary: One-tap resolution (winning claim + rationale), responses: { "200": { description: resolved } } }
+
+  /anomalies:
+    get: { tags: [anomalies], summary: Anomaly cards, responses: { "200": { description: page } } }
+  /anomalies/{anomaly_id}/decide:
+    post: { tags: [anomalies], summary: accept | dismiss | mark recovered, responses: { "200": { description: updated } } }
+
+  /approvals:
+    get: { tags: [approvals], summary: Approval queue, responses: { "200": { description: page } } }
+  /approvals/{approval_id}/decide:
+    post:
+      tags: [approvals]
+      summary: Approve/reject; on approve mints single-use action token and resumes the run
+      responses: { "200": { description: decided } }
+
+  /forecast:
+    get: { tags: [cash], summary: Latest forecast (scenarios + lines + drivers), responses: { "200": { description: forecast } } }
+  /receivables/radar:
+    get: { tags: [cash], summary: 45-day clocks, accrued interest, escalation states, responses: { "200": { description: radar } } }
+  /wc-actions:
+    get: { tags: [cash], summary: Ranked working-capital options, responses: { "200": { description: page } } }
+
+  /why/{entity_type}/{entity_id}:
+    get:
+      tags: [why]
+      summary: Composed evidence chain (app provenance + memory why-chain)
+      responses: { "200": { description: evidence trail } }
+
+  /webhooks/aa/consent:
+    post: { tags: [webhooks], security: [], summary: Account Aggregator consent callback (signed), responses: { "200": { description: ok } } }
+  /webhooks/email/events:
+    post: { tags: [webhooks], security: [], summary: Email delivery/open/reply events (signed), responses: { "200": { description: ok } } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }

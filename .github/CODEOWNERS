@@ -1,0 +1,20 @@
+# Review routing per layer — replace/add teammates' GitHub handles as they join.
+# Owners are final decision-makers for their layer (docs/team/collaboration.md §1).
+
+*                       @Jee8825
+
+/agents/                @Jee8825   # Agent Orchestration owner
+/tools/                 @Jee8825   # Tool Layer owner
+/memory/                @Jee8825   # Memory & Context owner
+/backend/               @Jee8825   # Backend/API owners
+/frontend/              @Jee8825   # Frontend owners
+/infra/                 @Jee8825   # Infra & DevOps (rotating)
+/.github/               @Jee8825
+
+# Cross-cutting: contract changes auto-request both affected sides — list
+# both owners on each line once handles are known.
+/contracts/             @Jee8825
+/shared/                @Jee8825
+/prompts/               @Jee8825
+/backend/app/guardrails/ @Jee8825
+/agents/policies/       @Jee8825

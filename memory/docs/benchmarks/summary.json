@@ -1,0 +1,32 @@
+{
+  "forgetting_curve": {
+    "chart": "/Users/Jee/Hackathon/QwenCloud-Hack/benchmarks/output/forgetting_curve.png",
+    "mean_strength_plain": 0.1092,
+    "mean_strength_reinforced": 0.1449,
+    "reinforcement_advantage": 1.33
+  },
+  "recall_snr": {
+    "chart": "/Users/Jee/Hackathon/QwenCloud-Hack/benchmarks/output/recall_snr.png",
+    "precision_at_k_naive": 0.484,
+    "precision_at_k_recall": 1.0,
+    "improvement": 0.516
+  },
+  "context_efficiency": {
+    "naive_topk": {
+      "relevant": 4,
+      "tokens": 368,
+      "per_1k": 10.87
+    },
+    "threshold_filter": {
+      "relevant": 4,
+      "tokens": 368,
+      "per_1k": 10.87
+    },
+    "recall_packer": {
+      "relevant": 7,
+      "tokens": 395,
+      "per_1k": 17.72
+    },
+    "chart": "/Users/Jee/Hackathon/QwenCloud-Hack/benchmarks/output/context_efficiency.png"
+  }
+}

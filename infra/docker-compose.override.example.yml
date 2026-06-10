@@ -1,0 +1,16 @@
+# Machine-specific port remaps. Copy to the REPO ROOT as
+# docker-compose.override.yml (gitignored) and adjust. Example below is the
+# known-good remap for machines where another stack owns 5432/6379/8000/3000.
+services:
+  app-postgres:
+    ports: !override ["15433:5432"]
+  app-redis:
+    ports: !override ["16380:6379"]
+  postgres:            # memory stack (recall)
+    ports: !override ["15432:5432"]
+  redis:               # memory stack (recall)
+    ports: !override ["16379:6379"]
+  api:                 # recall api
+    ports: !override ["18000:8000"]
+  frontend:            # recall dashboard
+    ports: !override ["13000:3000"]

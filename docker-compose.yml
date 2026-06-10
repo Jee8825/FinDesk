@@ -1,0 +1,45 @@
+# FinDesk app stack. The memory stack composes from memory/docker-compose.yml
+# (run both via `make up`). Machine-specific port remaps belong in a
+# gitignored docker-compose.override.yml — see infra/docker-compose.override.example.yml.
+name: findesk
+
+services:
+  app-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: findesk
+      POSTGRES_PASSWORD: findesk
+      POSTGRES_DB: findesk
+    ports: ["5433:5432"]
+    volumes: [app_pg_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U findesk"]
+      interval: 5s
+      retries: 10
+
+  app-redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # --- services below are enabled as their workspaces land code ----------
+  # backend:
+  #   build: ./backend
+  #   ports: ["8080:8080"]
+  #   env_file: .env
+  #   depends_on: { app-postgres: { condition: service_healthy }, app-redis: { condition: service_healthy } }
+  #
+  # agents-worker:
+  #   build: ./agents
+  #   env_file: .env
+  #   depends_on: { app-redis: { condition: service_healthy } }
+  #
+  # frontend:
+  #   build: ./frontend
+  #   ports: ["3001:3000"]
+
+volumes:
+  app_pg_data:

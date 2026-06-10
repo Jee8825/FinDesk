@@ -1,0 +1,115 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'backend/**'
+              - 'agents/**'
+              - 'tools/**'
+              - 'memory/**'
+              - 'shared/py/**'
+            frontend:
+              - 'frontend/**'
+              - 'shared/ts/**'
+            contracts:
+              - 'contracts/**'
+              - 'shared/**'
+
+  secrets-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No committed env files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::.env file committed"; exit 1; fi
+
+  lint-python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install ruff
+      - run: ruff check backend agents tools shared/py || true  # tighten to hard-fail once packages land
+      # mypy added per-workspace as code lands
+
+  test-python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Unit tests (per workspace, when present)
+        run: |
+          for ws in backend agents tools memory; do
+            if [ -f "$ws/pyproject.toml" ]; then
+              echo "== $ws =="; pip install -e "./$ws[dev]" 2>/dev/null || pip install -e "./$ws" || continue
+              (cd "$ws" && python -m pytest tests/unit -q) || exit 1
+            fi
+          done
+
+  lint-frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Lint + typecheck + build (when app present)
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run build
+          else echo "frontend not scaffolded yet"; fi
+
+  contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: OpenAPI lint
+        run: pipx run openapi-spec-validator contracts/api.yaml
+      - name: Generated code drift
+        run: |
+          if [ -f scripts/gen_contracts.py ]; then
+            python scripts/gen_contracts.py && git diff --exit-code shared/
+          else echo "generator not implemented yet"; fi
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conventional commit title
+        env: { TITLE: "${{ github.event.pull_request.title }}" }
+        run: |
+          echo "$TITLE" | grep -qE '^(feat|fix|chore|docs|refactor|test|ci)(\(.+\))?!?: ' \
+            || { echo "::error::PR title must follow conventional commits"; exit 1; }
