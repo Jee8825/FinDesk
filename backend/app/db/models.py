@@ -163,6 +163,24 @@ class AuditLog(TimestampedTenanted, Base):
     row_hash: Mapped[str] = mapped_column(String(64))
 
 
+class Approval(TimestampedTenanted, Base):
+    """The approval queue — the only path to executing a consequential action."""
+
+    __tablename__ = "approvals"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    action_kind: Mapped[str] = mapped_column(String(40), index=True)  # e.g. commit_match
+    action_payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    action_hash: Mapped[str] = mapped_column(String(64))  # sha256(canonical payload)
+    requested_by: Mapped[dict[str, Any]] = mapped_column(JSON)  # {kind: agent, run_id}
+    policy_verdicts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)
+    decider_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rationale: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    token_id: Mapped[str | None] = mapped_column(String(36), nullable=True)  # single-use
+
+
 class Document(TimestampedTenanted, Base):
     __tablename__ = "documents"
 

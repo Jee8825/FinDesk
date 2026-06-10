@@ -7,7 +7,6 @@ const SECTIONS: Record<string, { title: string; phase: string; blurb: string }> 
   receivables: { title: "Receivables", phase: "Phase 3–4", blurb: "45-day statutory radar and relationship-calibrated chasing." },
   forecast: { title: "Forecast", phase: "Phase 4", blurb: "4/13-week scenario cash forecast with confidence bands." },
   actions: { title: "Working capital", phase: "Phase 4", blurb: "Costed, ranked actions: TReDS, collections, re-timing." },
-  approvals: { title: "Approvals", phase: "Phase 2", blurb: "Everything consequential waits here for a human decision." },
   reports: { title: "Reports", phase: "Phase 3", blurb: "Month-end pack where every number answers “Why?”." },
 };
 

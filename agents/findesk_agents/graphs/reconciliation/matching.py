@@ -1,17 +1,40 @@
-"""Rules-only matcher v0 — pure functions, exhaustively unit-testable.
+"""Rules matcher — pure functions, exhaustively unit-testable.
 
-Deliberately no LLM (roadmap Phase 1): exact-amount credit matches with date
-sanity and counterparty-name corroboration. Anything ambiguous stays
-unmatched — an exception for the human queue, never a guess.
+Phase 1: exact-amount credit matches with date sanity and counterparty-name
+corroboration. Phase 2 adds **TDS-adjusted** matching: a payment that equals
+an open invoice minus tax-deducted-at-source. TDS proposals always price in
+below the commit floor, so they route to the human approval queue — the agent
+recommends, a human posts. Remembered deduction patterns (Recall memory) rank
+above standard-rate guesses. Anything ambiguous stays unmatched.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
 NAME_MATCH_CONFIDENCE = 0.95
 UNIQUE_AMOUNT_CONFIDENCE = 0.90  # equals the commit floor: unique amount alone commits
+TDS_REMEMBERED_CONFIDENCE = 0.85  # memory-corroborated rate → strong but human-gated
+TDS_STANDARD_RATE_CONFIDENCE = 0.80  # plausible standard rate, name-matched only
+
+# Common TDS rates in basis points: 194C 1%/2%, 194J/194H 5%/10%
+STANDARD_TDS_BPS = (100, 200, 500, 1000)
+
+_RATE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*TDS|TDS\s*(?:of|at)?\s*(\d+(?:\.\d+)?)\s*%", re.I)
+
+
+def parse_deduction_rates(memory_contents: list[str]) -> list[int]:
+    """Extract remembered TDS rates (basis points) from memory claim texts."""
+    rates: list[int] = []
+    for text in memory_contents:
+        for m in _RATE_RE.finditer(text):
+            pct = m.group(1) or m.group(2)
+            bps = round(float(pct) * 100)
+            if 0 < bps <= 3000 and bps not in rates:
+                rates.append(bps)
+    return rates
 
 
 def _name_tokens(name: str) -> set[str]:
@@ -82,6 +105,78 @@ def propose_matches(
     return proposals
 
 
+def propose_tds_matches(
+    unmatched: list[dict[str, Any]],
+    open_invoices: list[dict[str, Any]],
+    counterparties: list[dict[str, Any]],
+    remembered_rates: dict[str, list[int]] | None = None,
+) -> list[dict[str, Any]]:
+    """TDS-adjusted candidates: payment == invoice − invoice×rate, to the paisa.
+
+    Only name-corroborated candidates are proposed (an amount that merely
+    happens to be 98% of some invoice is not evidence). ``remembered_rates``
+    maps counterparty_id → TDS basis points learned from memory; those rank
+    above standard rates.
+    """
+    party_names = {p["id"]: p["name"] for p in counterparties}
+    remembered = remembered_rates or {}
+    taken: set[str] = set()
+    proposals: list[dict[str, Any]] = []
+
+    for txn in unmatched:
+        if txn["direction"] != "cr":
+            continue
+        txn_date = datetime.fromisoformat(txn["value_date"])
+        candidates: list[tuple[float, int, dict[str, Any]]] = []  # (conf, tds_paise, invoice)
+
+        for inv in open_invoices:
+            if inv["id"] in taken:
+                continue
+            if txn_date.date() < datetime.fromisoformat(inv["issue_date"]).date():
+                continue
+            if not _hint_matches(
+                txn.get("counterparty_hint"),
+                txn.get("narration", ""),
+                party_names.get(inv["counterparty_id"], ""),
+            ):
+                continue
+            invoice_amount = inv["amount_paise"]
+            party_rates = remembered.get(inv["counterparty_id"], [])
+            for bps in [*party_rates, *STANDARD_TDS_BPS]:
+                tds = invoice_amount * bps // 10_000
+                if invoice_amount * bps % 10_000 != 0:
+                    continue  # not an exact-paise deduction — too speculative
+                if txn["amount_paise"] == invoice_amount - tds and tds > 0:
+                    conf = (
+                        TDS_REMEMBERED_CONFIDENCE
+                        if bps in party_rates
+                        else TDS_STANDARD_RATE_CONFIDENCE
+                    )
+                    candidates.append((conf, tds, {**inv, "tds_bps": bps}))
+                    break
+
+        if len(candidates) != 1:
+            continue  # zero or ambiguous → exception queue
+        conf, tds, inv = candidates[0]
+        taken.add(inv["id"])
+        proposals.append(
+            {
+                "bank_transaction_id": txn["id"],
+                "invoice_id": inv["id"],
+                "counterparty_id": inv["counterparty_id"],
+                "invoice_number": inv["number"],
+                "amount_paise": txn["amount_paise"],
+                "tds_paise": tds,
+                "tds_bps": inv["tds_bps"],
+                "kind": "tds_adjusted",
+                "confidence": conf,
+                "txn_date": txn["value_date"],
+                "due_date": inv["due_date"],
+            }
+        )
+    return proposals
+
+
 def critic_review(
     proposals: list[dict[str, Any]], open_invoices: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -93,10 +188,13 @@ def critic_review(
     for p in proposals:
         problems = []
         inv = open_by_id.get(p["invoice_id"])
+        expected = p["amount_paise"] + int(p.get("tds_paise", 0))
         if inv is None:
             problems.append("invoice not open")
-        elif inv["amount_paise"] != p["amount_paise"]:
+        elif inv["amount_paise"] != expected:
             problems.append("amount mismatch")
+        if p.get("kind") == "tds_adjusted" and int(p.get("tds_paise", 0)) <= 0:
+            problems.append("tds_adjusted without tds amount")
         if p["bank_transaction_id"] in seen_txns:
             problems.append("duplicate transaction in batch")
         if p["invoice_id"] in seen_invoices:
