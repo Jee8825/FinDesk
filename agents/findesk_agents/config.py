@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     jobs_consumer_group: str = "workers"
     events_stream: str = "agents:events"
 
+    # LLM (Groq or any OpenAI-compatible endpoint). Empty key = deterministic-only.
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    llm_heavy_model: str = "llama-3.3-70b-versatile"
+
     otel_service_name: str = "findesk-agents"
 
 

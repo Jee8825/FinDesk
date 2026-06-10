@@ -60,10 +60,14 @@ export type TxnPage = {
     narration: string;
     counterparty_hint: string | null;
     match_status: string;
+    category_code: string | null;
+    category_source: string | null;
   }[];
   next_cursor: string | null;
   counts: Record<string, number>;
 };
+
+export type ChartAccount = { code: string; name: string; type: string };
 
 export function formatINR(amountPaise: number): string {
   const rupees = amountPaise / 100;
@@ -130,6 +134,14 @@ export const api = {
     request<TxnPage>(
       "GET",
       `${apiPaths.GET_BOOKS_TRANSACTIONS}${statusFilter ? `?status_filter=${statusFilter}` : ""}`,
+    ),
+  chartOfAccounts: () =>
+    request<ChartAccount[]>("GET", apiPaths.GET_BOOKS_CHART_OF_ACCOUNTS),
+  correctCategory: (txnId: string, code: string) =>
+    request<{ ok: boolean }>(
+      "PATCH",
+      apiPaths.PATCH_BOOKS_TRANSACTIONS_TXN_ID_CATEGORY.replace("{txn_id}", txnId),
+      { category_code: code },
     ),
   importStatement: async (file: File): Promise<{ document_id: string; run_id: string }> => {
     const form = new FormData();

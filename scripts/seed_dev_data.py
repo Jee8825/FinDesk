@@ -28,6 +28,7 @@ from app.auth.security import hash_password  # noqa: E402
 from app.db import dispose_engine, session_scope  # noqa: E402
 from app.db.models import (  # noqa: E402
     BankAccount,
+    ChartAccount,
     Counterparty,
     Invoice,
     Membership,
@@ -141,6 +142,36 @@ async def ensure_books(session, tenant_id: str) -> None:
     print(f"seeded {len(CLIENTS) + len(VENDORS)} counterparties, {len(INVOICES)} open invoices")
 
 
+# Standard small-business expense chart (subset; grows with Phase 3 GST work)
+CHART_OF_ACCOUNTS = [
+    ("software_cloud", "Software & Cloud Services", "expense"),
+    ("payroll", "Salaries & Payroll", "expense"),
+    ("rent", "Rent & Workspace", "expense"),
+    ("utilities", "Utilities & Electricity", "expense"),
+    ("taxes_gst", "GST Payments", "expense"),
+    ("taxes_tds", "TDS Deposits", "expense"),
+    ("staff_welfare", "Staff Welfare & Meals", "expense"),
+    ("travel", "Travel & Conveyance", "expense"),
+    ("professional_fees", "Professional Fees", "expense"),
+    ("bank_charges", "Bank Charges", "expense"),
+    ("marketing", "Marketing & Ads", "expense"),
+    ("misc_expense", "Miscellaneous Expense", "expense"),
+]
+
+
+async def ensure_chart(session, tenant_id: str) -> None:
+    count = await session.scalar(
+        select(func.count()).select_from(ChartAccount).where(ChartAccount.tenant_id == tenant_id)
+    )
+    if count:
+        return
+    for code, name, type_ in CHART_OF_ACCOUNTS:
+        session.add(
+            ChartAccount(id=uuid7(), tenant_id=tenant_id, code=code, name=name, type=type_)
+        )
+    print(f"seeded {len(CHART_OF_ACCOUNTS)} chart-of-accounts entries")
+
+
 async def ensure_late_invoices(session, tenant_id: str) -> None:
     """Idempotently add invoices introduced after the initial books seed."""
     parties = {
@@ -180,6 +211,7 @@ async def main() -> None:
         await ensure_books(session, tenant_id)
         await session.flush()
         await ensure_late_invoices(session, tenant_id)
+        await ensure_chart(session, tenant_id)
     await dispose_engine()
 
 

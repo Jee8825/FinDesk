@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from findesk_shared import uuid7
+from findesk_shared import uuid7, vendor_scope
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,9 +45,16 @@ async def sync_conflicts(session: AsyncSession, tenant_id: str) -> int:
             select(Conflict).where(Conflict.tenant_id == tenant_id)
         )
     }
-    created = 0
+    # scopes: client:<id> for counterparties + vendor:<slug> for debit vendors
+    scopes: dict[str, str] = {}
     for party in await repo.counterparties(tenant_id):
-        scope_key = f"client:{party.id}"
+        scopes[f"client:{party.id}"] = party.name
+    for txn in await repo.debit_transactions(tenant_id):
+        label = txn.counterparty_hint or txn.narration[:40]
+        scopes[vendor_scope(txn.counterparty_hint, txn.narration)] = label
+
+    created = 0
+    for scope_key, scope_label in scopes.items():
         engine_conflicts = await memoryclient.list_conflicts(
             tenant_id=tenant_id, scope_key=scope_key
         )
@@ -84,7 +91,7 @@ async def sync_conflicts(session: AsyncSession, tenant_id: str) -> int:
                         "semantic_distance": c.get("semantic_distance"),
                         "engine_resolution": c.get("resolution"),
                         "engine_rationale": c.get("rationale"),
-                        "counterparty": party.name,
+                        "counterparty": scope_label,
                     },
                     memory_conflict_id=cid,
                 )

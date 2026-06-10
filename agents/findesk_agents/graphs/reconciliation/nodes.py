@@ -4,16 +4,20 @@ beliefs via Recall (best-effort in Phase 1)."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from findesk_shared import format_inr, uuid7
 from findesk_tools.bank_statements import ToolError, parse_statement
 
-from findesk_agents.graphs.reconciliation import matching
+from findesk_agents.graphs.reconciliation import categorization, matching
 from findesk_agents.graphs.reconciliation.state import ReconState
+from findesk_agents.llm import get_critic_llm, render_prompt
 
 
 async def fetch_and_parse(state: ReconState) -> dict:
+    if not state.document_id:  # sweep run: nothing to parse
+        return {}
     step_id = uuid7()
     await state.emitter.step("fetch_statement", "started", step_id)
     doc = await state.backend.document(state.document_id, state.tenant_id)
@@ -46,6 +50,8 @@ async def fetch_and_parse(state: ReconState) -> dict:
 
 
 async def ingest(state: ReconState) -> dict:
+    if not state.parsed:
+        return {}
     step_id = uuid7()
     await state.emitter.step("ingest_transactions", "started", step_id)
     outcome = await state.backend.ingest_transactions(state.tenant_id, state.parsed)
@@ -105,13 +111,84 @@ async def match(state: ReconState) -> dict:
     return {"context": context, "proposals": proposals, "memory_notes": notes}
 
 
+async def categorize(state: ReconState) -> dict:
+    """A3: categorize uncategorized debits — memory first, rules second."""
+    step_id = uuid7()
+    await state.emitter.step("categorize", "started", step_id)
+    debits = state.context.get("uncategorized_debits", [])
+    valid_codes = set(state.context.get("valid_category_codes", []))
+
+    memory_claims: dict[str, tuple[str, float]] = {}
+    for txn in debits:
+        slug = categorization.vendor_slug(txn)
+        if slug in memory_claims:
+            continue
+        memories = await state.memory.recall(
+            tenant_id=state.tenant_id,
+            scope_key=f"vendor:{slug}",
+            query="expense category of this vendor",
+            token_budget=400,
+        )
+        claim = categorization.parse_category_claims(memories)
+        if claim:
+            memory_claims[slug] = claim
+
+    items = categorization.categorize(debits, memory_claims, valid_codes)
+    outcome = (
+        await state.backend.categorize(state.tenant_id, state.run_id, items)
+        if items
+        else {"applied": 0, "skipped": 0}
+    )
+    await state.emitter.step(
+        "categorize",
+        "finished",
+        step_id,
+        debits=len(debits),
+        assigned=outcome["applied"],
+        from_memory=sum(1 for i in items if i["source"] == "memory"),
+    )
+    return {"categorized": items, "vendor_claims_known": list(memory_claims)}
+
+
 async def critic(state: ReconState) -> dict:
     step_id = uuid7()
     await state.emitter.step("critic", "started", step_id)
     reviewed = matching.critic_review(state.proposals, state.context["open_invoices"])
+
+    # LLM second pass (Groq-gated): may veto a deterministic pass with a
+    # reason, never revive a deterministic fail. Absent/failed LLM = no-op.
+    checker = "deterministic-v0"
+    llm = get_critic_llm()
+    if llm is not None and any(p["critic_verdict"]["verdict"] == "pass" for p in reviewed):
+        passes = [
+            (i, p) for i, p in enumerate(reviewed) if p["critic_verdict"]["verdict"] == "pass"
+        ]
+        prompt = render_prompt(
+            "agents/critic@v1",
+            proposals=json.dumps([p for _, p in passes], default=str),
+            counterparties=json.dumps(state.context.get("counterparties", [])),
+        )
+        result = await llm.complete_json(prompt)
+        if result is not None:
+            checker = f"deterministic-v0+llm:{llm.model}"
+            for review in result.get("reviews", []):
+                try:
+                    idx = passes[int(review["index"])][0]
+                except (KeyError, ValueError, IndexError):
+                    continue
+                if review.get("verdict") == "fail":
+                    reviewed[idx]["critic_verdict"] = {
+                        "verdict": "fail",
+                        "problems": [f"llm: {review.get('reason', 'vetoed')}"],
+                        "checker": checker,
+                    }
+            for p in reviewed:
+                p["critic_verdict"].setdefault("checker", checker)
+                p["critic_verdict"]["checker"] = checker
+
     passed = sum(1 for p in reviewed if p["critic_verdict"]["verdict"] == "pass")
     await state.emitter.step(
-        "critic", "finished", step_id, reviewed=len(reviewed), passed=passed
+        "critic", "finished", step_id, reviewed=len(reviewed), passed=passed, checker=checker
     )
     return {"proposals": reviewed}
 
@@ -176,5 +253,26 @@ async def learn(state: ReconState) -> dict:
                 ),
             )
             stored += 1 if ok2 else 0
+
+    # vendor_category claims for rule-assigned debits — only when no claim
+    # exists yet for that vendor (the engine treats near-duplicate ingests as
+    # conflicts, so repeated identical claims would spam the conflict queue)
+    known = set(state.vendor_claims_known)
+    claimed: set[str] = set()
+    for item in state.categorized:
+        slug = item["vendor_slug"]
+        if item["source"] != "rule" or slug in known or slug in claimed:
+            continue
+        ok3 = await state.memory.remember(
+            tenant_id=state.tenant_id,
+            scope_key=f"vendor:{slug}",
+            run_id=state.run_id,
+            content=(
+                f"Vendor '{item['vendor_label']}' expenses are categorized as "
+                f"{item['category_code']}."
+            ),
+        )
+        stored += 1 if ok3 else 0
+        claimed.add(slug)
     await state.emitter.step("learn", "finished", step_id, observations=stored)
     return {"memory_notes": [*state.memory_notes, f"stored {stored} observations"]}

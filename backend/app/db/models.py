@@ -110,6 +110,20 @@ class BankTransaction(TimestampedTenanted, Base):
     dedupe_hash: Mapped[str] = mapped_column(String(64))
     source: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     match_status: Mapped[str] = mapped_column(String(12), default="unmatched", index=True)
+    category_code: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    # source: rule | memory | human
+    category_source: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    category_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class ChartAccount(TimestampedTenanted, Base):
+    __tablename__ = "chart_of_accounts"
+    __table_args__ = (UniqueConstraint("tenant_id", "code"),)
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    code: Mapped[str] = mapped_column(String(40))
+    name: Mapped[str] = mapped_column(String(120))
+    type: Mapped[str] = mapped_column(String(12))  # expense|income|asset|liability|equity
 
 
 class Invoice(TimestampedTenanted, Base):

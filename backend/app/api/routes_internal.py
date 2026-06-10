@@ -101,6 +101,8 @@ class ReconContext(BaseModel):
     unmatched: list[dict[str, Any]]
     open_invoices: list[dict[str, Any]]
     counterparties: list[dict[str, Any]]
+    uncategorized_debits: list[dict[str, Any]] = []
+    valid_category_codes: list[str] = []
 
 
 @router.get("/recon/context", response_model=ReconContext)
@@ -113,7 +115,20 @@ async def recon_context(
         txns = await repo.unmatched_transactions(tenant_id)
         invoices = await repo.open_invoices(tenant_id)
         parties = await repo.counterparties(tenant_id)
+        debits = await repo.uncategorized_debits(tenant_id)
+        codes = [c.code for c in await repo.chart_accounts(tenant_id)]
     return ReconContext(
+        uncategorized_debits=[
+            {
+                "id": t.id,
+                "direction": t.direction,
+                "narration": t.narration,
+                "counterparty_hint": t.counterparty_hint,
+                "category_code": t.category_code,
+            }
+            for t in debits
+        ],
+        valid_category_codes=codes,
         unmatched=[
             {
                 "id": t.id,
@@ -138,6 +153,53 @@ async def recon_context(
         ],
         counterparties=[{"id": c.id, "name": c.name, "kind": c.kind} for c in parties],
     )
+
+
+class CategorizeRequest(BaseModel):
+    tenant_id: str
+    run_id: str
+    items: list[dict[str, Any]]  # {bank_transaction_id, category_code, source, confidence}
+
+
+class CategorizeOut(BaseModel):
+    applied: int
+    skipped: int
+
+
+@router.post("/recon/categorize", response_model=CategorizeOut)
+async def categorize_transactions(
+    body: CategorizeRequest, x_internal_token: str | None = Header(None)
+) -> CategorizeOut:
+    _check_token(x_internal_token)
+    applied = 0
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        valid = {c.code for c in await repo.chart_accounts(body.tenant_id)}
+        for item in body.items:
+            if item.get("category_code") not in valid:
+                continue
+            txn = await repo.transaction(item["bank_transaction_id"], body.tenant_id)
+            if txn is None:
+                continue
+            ok = await repo.set_category(
+                txn.id,
+                code=item["category_code"],
+                source=item.get("source", "rule"),
+                confidence=float(item.get("confidence", 0.8)),
+            )
+            applied += 1 if ok else 0
+        if applied:
+            from app.services.audit import write_audit
+
+            await write_audit(
+                session,
+                tenant_id=body.tenant_id,
+                actor={"kind": "agent", "run_id": body.run_id},
+                action="transactions.categorized",
+                entity_ref=f"run:{body.run_id}",
+                payload={"applied": applied, "items": body.items},
+            )
+    return CategorizeOut(applied=applied, skipped=len(body.items) - applied)
 
 
 class CommitRequest(BaseModel):
