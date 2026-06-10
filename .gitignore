@@ -28,3 +28,6 @@ docker-compose.override.yml
 
 # data
 *.local.db
+
+# runtime data (dev uploads etc.)
+var/
