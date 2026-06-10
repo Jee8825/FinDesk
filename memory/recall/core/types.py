@@ -135,3 +135,7 @@ class ConflictDTO(BaseModel):
     resolved_belief: str | None
     rationale: str | None
     created_at: datetime
+    # FinDesk additive extension (ADR-0002): both sides of the conflict, so
+    # consumers can render/resolve without touching the store directly.
+    memory_a: uuid.UUID | None = None
+    memory_b: uuid.UUID | None = None

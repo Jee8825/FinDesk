@@ -163,6 +163,23 @@ class AuditLog(TimestampedTenanted, Base):
     row_hash: Mapped[str] = mapped_column(String(64))
 
 
+class Conflict(TimestampedTenanted, Base):
+    """A4 conflict cards — materialized from Recall's conflict log."""
+
+    __tablename__ = "conflicts"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    claim_kind: Mapped[str] = mapped_column(String(30), default="belief")
+    scope_key: Mapped[str] = mapped_column(String(80), index=True)  # e.g. client:<id>
+    claim_a: Mapped[dict[str, Any]] = mapped_column(JSON)  # {memory_id, content, confidence}
+    claim_b: Mapped[dict[str, Any]] = mapped_column(JSON)
+    engine_view: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # distance, default
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)
+    resolution: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    resolver_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    memory_conflict_id: Mapped[str] = mapped_column(String(36), unique=True)
+
+
 class Approval(TimestampedTenanted, Base):
     """The approval queue — the only path to executing a consequential action."""
 

@@ -362,6 +362,8 @@ class RecallEngine:
                     resolved_belief=r.resolved_belief,
                     rationale=r.rationale,
                     created_at=r.created_at,
+                    memory_a=r.memory_a,
+                    memory_b=r.memory_b,
                 )
                 for r in rows
             ]

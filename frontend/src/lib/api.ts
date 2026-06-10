@@ -93,9 +93,31 @@ export type Approval = {
   created_at: string;
 };
 
+export type ConflictCard = {
+  id: string;
+  claim_kind: string;
+  scope_key: string;
+  claim_a: { memory_id: string; content: string; confidence: number | null };
+  claim_b: { memory_id: string; content: string; confidence: number | null };
+  engine_view: {
+    semantic_distance?: number;
+    engine_rationale?: string;
+    counterparty?: string;
+  };
+  status: string;
+  created_at: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  conflicts: () => request<ConflictCard[]>("GET", apiPaths.GET_CONFLICTS),
+  resolveConflict: (id: string, winner: "a" | "b", rationale?: string) =>
+    request<{ ok: boolean; kept: string }>(
+      "POST",
+      apiPaths.POST_CONFLICTS_CONFLICT_ID_RESOLVE.replace("{conflict_id}", id),
+      { winner, rationale },
+    ),
   approvals: (statusFilter = "pending") =>
     request<Approval[]>("GET", `${apiPaths.GET_APPROVALS}?status_filter=${statusFilter}`),
   decideApproval: (id: string, decision: "approved" | "rejected", rationale?: string) =>

@@ -73,8 +73,11 @@ INVOICES = [
 
 # Phase-2 TDS hero case: ₹45,000 invoice paid as ₹44,100 (2% TDS) in the May
 # fixture (statement_may2026.csv) → tds_adjusted proposal → approval queue.
+# Phase-2b drift case: ₹2,00,000 invoice paid as ₹1,90,000 (5% TDS) in the
+# June fixture — contradicts the remembered 2% pattern → memory conflict card.
 LATE_INVOICES = [
     ("Blue Tokai Coffee Pvt Ltd", "INV-2026-053", 4_500_000, "2026-04-25"),
+    ("Blue Tokai Coffee Pvt Ltd", "INV-2026-054", 20_000_000, "2026-05-20"),
 ]
 
 

@@ -45,3 +45,6 @@ smoke:         ## weekly end-to-end smoke (docs/team/collaboration.md §4)
 
 smoke-memory:  ## memory-service smoke (Recall stack must be up)
 	$(PY) scripts/smoke_memory.py
+
+eval:          ## reconciliation accuracy harness (fails on regression)
+	$(PY) infra/observability/evals/run_recon_eval.py

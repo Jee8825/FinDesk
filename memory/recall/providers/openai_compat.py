@@ -177,10 +177,14 @@ def build_openai_compat_llm(settings: Settings, provider: str) -> OpenAICompatLL
             light_model=settings.llm_light_model,
         )
     if provider == "local":
+        # FinDesk additive extension (ADR-0002): the local LLM may point at any
+        # OpenAI-compatible endpoint (e.g. Groq) with its own key, while the
+        # embedder keeps local_base_url (Groq serves no embedding models).
+        # Both envs optional; defaults preserve original behavior.
         return OpenAICompatLLM(
             name="local",
-            api_key="not-needed",
-            base_url=settings.local_base_url,
+            api_key=os.getenv("RECALL_LOCAL_API_KEY", "not-needed"),
+            base_url=os.getenv("RECALL_LOCAL_LLM_BASE_URL") or settings.local_base_url,
             heavy_model=settings.llm_heavy_model,
             light_model=settings.llm_light_model,
         )

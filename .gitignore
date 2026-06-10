@@ -31,3 +31,4 @@ docker-compose.override.yml
 
 # runtime data (dev uploads etc.)
 var/
+evals_out/

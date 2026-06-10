@@ -79,9 +79,22 @@ class ChatRequest(BaseModel):
 
 
 _SPAN_RE = re.compile(r"---\s*\n(.*?)\n---", re.DOTALL)
+_NEW_BELIEF_RE = re.compile(r'New belief:\s*\n\s*content: "(.*?)"', re.DOTALL)
 
 
 def _fake_completion(prompt: str) -> str:
+    if "conflict-resolution component" in prompt:
+        # Deterministic conservative stance: never auto-resolve a belief
+        # conflict in dev — flag it for the human queue (which is also the
+        # right default posture for a finance product).
+        m = _NEW_BELIEF_RE.search(prompt)
+        return json.dumps(
+            {
+                "resolution": "flagged",
+                "resolved_belief": m.group(1) if m else "",
+                "rationale": "dev-shim: contradictory beliefs always flagged for human review",
+            }
+        )
     if '"facts"' in prompt or "memory-extraction" in prompt:
         spans = _SPAN_RE.findall(prompt)
         content = spans[-1].strip() if spans else ""
