@@ -6,7 +6,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from findesk_shared import uuid7
-from sqlalchemy import JSON, BigInteger, DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -136,6 +145,10 @@ class Invoice(TimestampedTenanted, Base):
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     amount_paise: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|paid
+    # MSME Act day-zero; falls back to issue_date when not recorded
+    acceptance_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Match(TimestampedTenanted, Base):
@@ -175,6 +188,21 @@ class AuditLog(TimestampedTenanted, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     prev_hash: Mapped[str] = mapped_column(String(64))
     row_hash: Mapped[str] = mapped_column(String(64))
+
+
+class StatutoryClock(TimestampedTenanted, Base):
+    """B2: one MSME-Act 45-day clock per open receivable (engine-computed)."""
+
+    __tablename__ = "statutory_clocks"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), unique=True)
+    acceptance_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    statutory_due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    overdue_days: Mapped[int] = mapped_column(Integer, default=0)
+    accrued_interest_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    annual_rate_bps: Mapped[int] = mapped_column(Integer)
+    escalation_level: Mapped[str] = mapped_column(String(20), default="none", index=True)
 
 
 class Anomaly(TimestampedTenanted, Base):

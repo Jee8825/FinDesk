@@ -169,18 +169,42 @@ async def decide_approval(
             approval_id=approval.id,
         )
         result["execution"] = outcome
-        if outcome.get("committed") and proposal.get("kind") == "tds_adjusted":
-            # the human just confirmed a deduction pattern — remember it
+        if outcome.get("committed"):
+            from findesk_shared import format_inr
+
             from app import memoryclient
 
-            rate_pct = int(proposal.get("tds_bps", 0)) / 100
-            await memoryclient.remember(
-                tenant_id=tenant_id,
-                scope_key=f"client:{proposal['counterparty_id']}",
-                session_id=run_id or f"approval:{approval.id}",
-                content=(
-                    f"This client deducts {rate_pct:g}% TDS on payments — confirmed by "
-                    f"human approval on invoice {proposal.get('invoice_number')}."
-                ),
-            )
+            session_id = run_id or f"approval:{approval.id}"
+            scope_key = f"client:{proposal['counterparty_id']}"
+            # payment-timing observation (B1 feedstock) — the run-side learn
+            # node only covers auto-commits; approvals learn here
+            try:
+                paid = datetime.fromisoformat(proposal["txn_date"]).date()
+                due = datetime.fromisoformat(proposal["due_date"]).date()
+                delta = (paid - due).days
+                timing = f"{delta} days late" if delta > 0 else f"{-delta} days early"
+                await memoryclient.remember(
+                    tenant_id=tenant_id,
+                    scope_key=scope_key,
+                    session_id=session_id,
+                    content=(
+                        f"Invoice {proposal.get('invoice_number')} "
+                        f"({format_inr(int(proposal['amount_paise']))}) was paid {timing} "
+                        f"relative to its due date {due.isoformat()}."
+                    ),
+                )
+            except (KeyError, ValueError):
+                pass  # older payloads without dates — nothing to learn
+            if proposal.get("kind") == "tds_adjusted":
+                # the human just confirmed a deduction pattern — remember it
+                rate_pct = int(proposal.get("tds_bps", 0)) / 100
+                await memoryclient.remember(
+                    tenant_id=tenant_id,
+                    scope_key=scope_key,
+                    session_id=session_id,
+                    content=(
+                        f"This client deducts {rate_pct:g}% TDS on payments — confirmed by "
+                        f"human approval on invoice {proposal.get('invoice_number')}."
+                    ),
+                )
     return result

@@ -40,3 +40,14 @@ def test_vendor_slug_strips_billing_cycle_noise():
     assert vendor_slug("BLUE TOKAI COFFEE") == "blue-tokai-coffee"
     assert vendor_slug(None, "TDS DEPOSIT 194C Q1") == "tds-deposit-194c"
     assert vendor_slug(None, "") == "unknown"
+
+
+def test_parse_late_days_handles_late_and_early():
+    from findesk_shared import parse_late_days
+
+    contents = [
+        "Invoice INV-1 (₹95,000.00) was paid 9 days late relative to its due date.",
+        "Invoice INV-2 (₹45,000.00) was paid 23 days early relative to its due date.",
+        "This client deducts 2% TDS on payments.",
+    ]
+    assert parse_late_days(contents) == [9, -23]

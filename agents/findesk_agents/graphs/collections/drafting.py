@@ -11,19 +11,16 @@ words, never steps. Drafts are recommend-only; sending is human-gated.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from findesk_shared import format_inr
+from findesk_shared import format_inr, parse_late_days
 
 GENTLE_MAX_OVERDUE = 30
-
-_LATE_RE = re.compile(r"paid\s+(\d+)\s+days?\s+late")
 
 
 def behavior_profile(memories: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarize remembered payment behavior for one client."""
-    lates = [int(m.group(1)) for c in memories if (m := _LATE_RE.search(c.get("content", "")))]
+    lates = parse_late_days([m.get("content", "") for m in memories])
     return {
         "observations": len(lates),
         "avg_days_late": round(sum(lates) / len(lates), 1) if lates else None,

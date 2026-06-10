@@ -14,6 +14,7 @@ from app.api.routes_approvals import router as approvals_router
 from app.api.routes_books import router as books_router
 from app.api.routes_conflicts import router as conflicts_router
 from app.api.routes_internal import router as internal_router
+from app.api.routes_radar import router as radar_router
 from app.api.routes_reports import router as reports_router
 from app.api.routes_why import router as why_router
 from app.auth.routes import router as auth_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(conflicts_router, prefix=prefix)
     app.include_router(anomalies_router, prefix=prefix)
     app.include_router(reports_router, prefix=prefix)
+    app.include_router(radar_router, prefix=prefix)
     app.include_router(why_router, prefix=prefix)
     app.include_router(internal_router)  # worker-only, shared-token auth
     return app
