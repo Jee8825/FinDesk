@@ -20,6 +20,8 @@ from findesk_agents.config import get_settings
 from findesk_agents.events import RedisEventEmitter
 from findesk_agents.graphs.anomaly_scan import graph as anomaly_graph
 from findesk_agents.graphs.anomaly_scan.state import AnomalyState
+from findesk_agents.graphs.cash_forecast import graph as forecast_graph
+from findesk_agents.graphs.cash_forecast.state import ForecastState
 from findesk_agents.graphs.collections import graph as collections_graph
 from findesk_agents.graphs.collections.state import CollectionsState
 from findesk_agents.graphs.ping import graph as ping_graph
@@ -51,6 +53,20 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
             )
             final = await ping_graph.run(state)
             await emitter.done("succeeded", summary=final.summary)
+        elif event.startswith("job.forecast.") or event.startswith("job.cash_forecast."):
+            backend = BackendClient()
+            try:
+                fc_state = ForecastState(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    emitter=emitter,
+                    backend=backend,
+                    memory=MemoryClient(),
+                )
+                fc_final = await forecast_graph.run(fc_state)
+                await emitter.done("succeeded", summary=fc_final.summary)
+            finally:
+                await backend.aclose()
         elif event.startswith("job.collections."):
             backend = BackendClient()
             try:

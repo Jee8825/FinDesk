@@ -287,6 +287,111 @@ async def persist_anomalies(
     return AnomalyPersistOut(created=created, existing=len(body.findings) - created)
 
 
+class ForecastContext(BaseModel):
+    opening_balance_paise: int
+    open_invoices: list[dict[str, Any]]
+    debits: list[dict[str, Any]]
+
+
+@router.get("/forecast/context", response_model=ForecastContext)
+async def forecast_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> ForecastContext:
+    _check_token(x_internal_token)
+    from sqlalchemy import func, select
+
+    from app.db.models import BankTransaction
+
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        # cash position derived from the books: net of all recorded movements
+        credits = await session.scalar(
+            select(func.coalesce(func.sum(BankTransaction.amount_paise), 0)).where(
+                BankTransaction.tenant_id == tenant_id, BankTransaction.direction == "cr"
+            )
+        )
+        debits_sum = await session.scalar(
+            select(func.coalesce(func.sum(BankTransaction.amount_paise), 0)).where(
+                BankTransaction.tenant_id == tenant_id, BankTransaction.direction == "dr"
+            )
+        )
+        invoices = await repo.open_invoices(tenant_id)
+        parties = {c.id: c.name for c in await repo.counterparties(tenant_id)}
+        debit_rows = await repo.debit_transactions(tenant_id)
+    return ForecastContext(
+        opening_balance_paise=int(credits) - int(debits_sum),
+        open_invoices=[
+            {
+                "id": i.id,
+                "number": i.number,
+                "client": parties.get(i.counterparty_id, "?"),
+                "client_id": i.counterparty_id,
+                "amount_paise": i.amount_paise,
+                "due_date": i.due_date.isoformat(),
+            }
+            for i in invoices
+        ],
+        debits=[
+            {
+                "id": t.id,
+                "value_date": t.value_date.isoformat(),
+                "amount_paise": t.amount_paise,
+                "narration": t.narration,
+                "counterparty_hint": t.counterparty_hint,
+            }
+            for t in debit_rows
+        ],
+    )
+
+
+class ForecastPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    result: dict[str, Any]
+
+
+@router.post("/forecast")
+async def persist_forecast(
+    body: ForecastPersist, x_internal_token: str | None = Header(None)
+) -> dict[str, Any]:
+    _check_token(x_internal_token)
+    from findesk_shared import uuid7
+
+    from app.db.models import Forecast, ForecastLine
+
+    r = body.result
+    async with session_scope() as session:
+        forecast = Forecast(
+            id=uuid7(),
+            tenant_id=body.tenant_id,
+            run_id=body.run_id,
+            horizon_weeks=r["horizon_weeks"],
+            opening_balance_paise=r["opening_balance_paise"],
+            weekly_outflow_paise=r["weekly_outflow_paise"],
+            outflow_basis=r["outflow_basis"],
+            gap=r["gap"],
+            narrative=r["narrative"],
+        )
+        session.add(forecast)
+        for scenario, weeks in r["scenarios"].items():
+            for week in weeks:
+                session.add(
+                    ForecastLine(
+                        id=uuid7(),
+                        tenant_id=body.tenant_id,
+                        forecast_id=forecast.id,
+                        scenario=scenario,
+                        week=week["week"],
+                        week_start=week["week_start"],
+                        inflow_paise=week["inflow_paise"],
+                        outflow_paise=week["outflow_paise"],
+                        closing_paise=week["closing_paise"],
+                        drivers=week["drivers"],
+                    )
+                )
+    return {"forecast_id": forecast.id}
+
+
 class CollectionsContext(BaseModel):
     overdue: list[dict[str, Any]]
     sender_name: str
