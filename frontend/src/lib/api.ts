@@ -124,9 +124,73 @@ export type AnomalyCard = {
   created_at: string;
 };
 
+export type WhyRef = { kind: string; id: string };
+
+export type MonthEndReport = {
+  period: string;
+  generated_at: string;
+  cash: {
+    inflow_paise: number;
+    outflow_paise: number;
+    net_paise: number;
+    by_category: {
+      category_code: string;
+      category_name: string;
+      amount_paise: number;
+      count: number;
+      why: WhyRef[];
+    }[];
+  };
+  reconciliation: {
+    transactions: number;
+    matched: number;
+    matched_amount_paise: number;
+    tds_matches: number;
+    unmatched: number;
+    why: WhyRef[];
+  };
+  receivables: {
+    overdue_total_paise: number;
+    aging: {
+      bucket: string;
+      amount_paise: number;
+      items: {
+        invoice_number: string;
+        client: string;
+        amount_paise: number;
+        days_overdue: number;
+        why: WhyRef[];
+      }[];
+    }[];
+  };
+  anomalies: { open: number; recoverable_paise: number; why: WhyRef[] };
+  narrative: string[];
+};
+
+export type WhyEvent = {
+  at: string;
+  actor: Record<string, unknown>;
+  action: string;
+  payload: Record<string, unknown>;
+  row_hash: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  monthEndReport: (period: string) =>
+    request<MonthEndReport>(
+      "GET",
+      `${apiPaths.GET_REPORTS_MONTH_END}?period=${period}`,
+    ),
+  why: (kind: string, id: string) =>
+    request<{ entity_ref: string; events: WhyEvent[] }>(
+      "GET",
+      apiPaths.GET_WHY_ENTITY_TYPE_ENTITY_ID.replace("{entity_type}", kind).replace(
+        "{entity_id}",
+        id,
+      ),
+    ),
   anomalies: () => request<AnomalyCard[]>("GET", apiPaths.GET_ANOMALIES),
   decideAnomaly: (id: string, decision: "accepted" | "dismissed" | "recovered") =>
     request<{ ok: boolean }>(
