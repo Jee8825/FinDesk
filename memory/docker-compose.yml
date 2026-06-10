@@ -57,6 +57,10 @@ services:
       RECALL_REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    volumes:
+      # FinDesk fix: the image build omits prompts/ but recall.core.prompts
+      # resolves /app/prompts — mount them read-only (also live-tweakable in dev)
+      - ./prompts:/app/prompts:ro
     depends_on:
       postgres:
         condition: service_healthy

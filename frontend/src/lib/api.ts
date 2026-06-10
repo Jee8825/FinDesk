@@ -74,9 +74,36 @@ export function formatINR(amountPaise: number): string {
   }).format(rupees);
 }
 
+export type Approval = {
+  id: string;
+  action_kind: string;
+  action_payload: {
+    invoice_number?: string;
+    amount_paise?: number;
+    tds_paise?: number;
+    tds_bps?: number;
+    kind?: string;
+    confidence?: number;
+    critic_verdict?: { verdict?: string; checker?: string };
+    [k: string]: unknown;
+  };
+  policy_verdicts: Record<string, unknown>;
+  requested_by: Record<string, unknown>;
+  status: string;
+  created_at: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  approvals: (statusFilter = "pending") =>
+    request<Approval[]>("GET", `${apiPaths.GET_APPROVALS}?status_filter=${statusFilter}`),
+  decideApproval: (id: string, decision: "approved" | "rejected", rationale?: string) =>
+    request<{ ok: boolean; status: string }>(
+      "POST",
+      apiPaths.POST_APPROVALS_APPROVAL_ID_DECIDE.replace("{approval_id}", id),
+      { decision, rationale },
+    ),
   transactions: (statusFilter?: string) =>
     request<TxnPage>(
       "GET",

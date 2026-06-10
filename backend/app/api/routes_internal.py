@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.db import session_scope
 from app.db.books_repo import BooksRepo
-from app.services.recon import commit_proposal
+from app.services.recon import route_proposal
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -149,6 +149,7 @@ class CommitRequest(BaseModel):
 class CommitOut(BaseModel):
     results: list[dict[str, Any]]
     committed: int
+    queued: int
 
 
 @router.post("/recon/commit", response_model=CommitOut)
@@ -160,8 +161,12 @@ async def commit_matches(
     async with session_scope() as session:
         for proposal in body.proposals:
             results.append(
-                await commit_proposal(
+                await route_proposal(
                     session, tenant_id=body.tenant_id, run_id=body.run_id, proposal=proposal
                 )
             )
-    return CommitOut(results=results, committed=sum(1 for r in results if r["committed"]))
+    return CommitOut(
+        results=results,
+        committed=sum(1 for r in results if r["committed"]),
+        queued=sum(1 for r in results if r.get("queued")),
+    )

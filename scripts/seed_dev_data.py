@@ -71,6 +71,12 @@ INVOICES = [
     ("Subko Specialty", "INV-2026-052", 15_000_000, "2026-03-30"),
 ]
 
+# Phase-2 TDS hero case: ₹45,000 invoice paid as ₹44,100 (2% TDS) in the May
+# fixture (statement_may2026.csv) → tds_adjusted proposal → approval queue.
+LATE_INVOICES = [
+    ("Blue Tokai Coffee Pvt Ltd", "INV-2026-053", 4_500_000, "2026-04-25"),
+]
+
 
 async def ensure_identity(session) -> str:
     users = UserRepo(session)
@@ -132,11 +138,45 @@ async def ensure_books(session, tenant_id: str) -> None:
     print(f"seeded {len(CLIENTS) + len(VENDORS)} counterparties, {len(INVOICES)} open invoices")
 
 
+async def ensure_late_invoices(session, tenant_id: str) -> None:
+    """Idempotently add invoices introduced after the initial books seed."""
+    parties = {
+        c.name: c.id
+        for c in (
+            await session.scalars(
+                select(Counterparty).where(Counterparty.tenant_id == tenant_id)
+            )
+        )
+    }
+    for client, number, amount_paise, issue in LATE_INVOICES:
+        exists = await session.scalar(
+            select(Invoice).where(Invoice.tenant_id == tenant_id, Invoice.number == number)
+        )
+        if exists is not None or client not in parties:
+            continue
+        issue_dt = datetime.fromisoformat(issue).replace(tzinfo=UTC)
+        session.add(
+            Invoice(
+                id=uuid7(),
+                tenant_id=tenant_id,
+                counterparty_id=parties[client],
+                number=number,
+                issue_date=issue_dt,
+                due_date=issue_dt + timedelta(days=30),
+                amount_paise=amount_paise,
+                status="open",
+            )
+        )
+        print(f"seeded late invoice {number}")
+
+
 async def main() -> None:
     async with session_scope() as session:
         tenant_id = await ensure_identity(session)
         await session.flush()
         await ensure_books(session, tenant_id)
+        await session.flush()
+        await ensure_late_invoices(session, tenant_id)
     await dispose_engine()
 
 
