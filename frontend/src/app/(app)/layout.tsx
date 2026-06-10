@@ -20,6 +20,7 @@ const NAV = [
   { href: "/actions", label: "Actions" },
   { href: "/approvals", label: "Approvals" },
   { href: "/reports", label: "Reports" },
+  { href: "/dataroom", label: "Data room" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
