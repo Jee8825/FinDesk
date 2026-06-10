@@ -1,0 +1,79 @@
+"""Cash-forecast nodes: fetch → recall behavior → project → persist."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from findesk_shared import parse_late_days, uuid7
+
+from findesk_agents.graphs.anomaly_scan import detection
+from findesk_agents.graphs.cash_forecast import engine
+from findesk_agents.graphs.cash_forecast.state import ForecastState
+
+
+async def fetch(state: ForecastState) -> dict:
+    step_id = uuid7()
+    await state.emitter.step("fetch_context", "started", step_id)
+    ctx = await state.backend.forecast_context(state.tenant_id)
+    await state.emitter.step(
+        "fetch_context",
+        "finished",
+        step_id,
+        opening_balance=ctx["opening_balance_paise"],
+        open_invoices=len(ctx["open_invoices"]),
+    )
+    return {
+        "opening_balance_paise": ctx["opening_balance_paise"],
+        "open_invoices": ctx["open_invoices"],
+        "debits": ctx["debits"],
+    }
+
+
+async def recall_behavior(state: ForecastState) -> dict:
+    step_id = uuid7()
+    await state.emitter.step("recall_behavior", "started", step_id)
+    avg_late: dict[str, float] = {}
+    for client_id in {inv["client_id"] for inv in state.open_invoices}:
+        memories = await state.memory.recall(
+            tenant_id=state.tenant_id,
+            scope_key=f"client:{client_id}",
+            query="payment behavior: how late does this client pay?",
+            token_budget=400,
+        )
+        lates = parse_late_days([m.get("content", "") for m in memories])
+        if lates:
+            avg_late[client_id] = round(sum(lates) / len(lates), 1)
+    await state.emitter.step(
+        "recall_behavior", "finished", step_id, clients_with_history=len(avg_late)
+    )
+    return {"avg_late_by_client": avg_late}
+
+
+async def projector(state: ForecastState) -> dict:
+    step_id = uuid7()
+    await state.emitter.step("project", "started", step_id)
+    monthly_outflows = detection.baseline_claims(state.debits)
+    result = engine.project(
+        start=datetime.now(UTC),
+        opening_balance_paise=state.opening_balance_paise,
+        open_invoices=state.open_invoices,
+        avg_late_by_client=state.avg_late_by_client,
+        monthly_outflows=monthly_outflows,
+    )
+    await state.emitter.step(
+        "project",
+        "finished",
+        step_id,
+        recurring_vendors=len(monthly_outflows),
+        weekly_outflow=result["weekly_outflow_paise"],
+        gap_week=(result["gap"] or {}).get("week"),
+    )
+    return {"result": result}
+
+
+async def persist(state: ForecastState) -> dict:
+    step_id = uuid7()
+    await state.emitter.step("persist", "started", step_id)
+    await state.backend.persist_forecast(state.tenant_id, state.run_id, state.result)
+    await state.emitter.step("persist", "finished", step_id)
+    return {"summary": " ".join(state.result["narrative"])}

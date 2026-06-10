@@ -198,9 +198,37 @@ export type RadarOut = {
   ca_note: string;
 };
 
+export type ForecastWeek = {
+  week: number;
+  week_start: string;
+  inflow_paise: number;
+  outflow_paise: number;
+  closing_paise: number;
+  drivers: { invoice_number: string; client: string; amount_paise: number; expected: string }[];
+};
+
+export type ForecastOut = {
+  forecast_id: string;
+  generated_at: string;
+  horizon_weeks: number;
+  opening_balance_paise: number;
+  weekly_outflow_paise: number;
+  outflow_basis: { vendor: string; monthly_paise: number }[];
+  gap: {
+    scenario: string;
+    week: number;
+    week_start: string;
+    shortfall_paise: number;
+    delayed_inflows: { invoice_number: string; client: string; amount_paise: number; expected: string }[];
+  } | null;
+  narrative: string[];
+  scenarios: Record<string, ForecastWeek[]>;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  forecast: () => request<ForecastOut>("GET", apiPaths.GET_FORECAST),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(

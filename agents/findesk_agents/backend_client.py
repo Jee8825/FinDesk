@@ -42,6 +42,23 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def forecast_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get(
+            "/internal/forecast/context", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def persist_forecast(
+        self, tenant_id: str, run_id: str, result: dict[str, Any]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/forecast",
+            json={"tenant_id": tenant_id, "run_id": run_id, "result": result},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def collections_context(self, tenant_id: str) -> dict[str, Any]:
         resp = await self._client.get(
             "/internal/collections/context", params={"tenant_id": tenant_id}

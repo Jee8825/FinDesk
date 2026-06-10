@@ -79,6 +79,8 @@ INVOICES = [
 LATE_INVOICES = [
     ("Blue Tokai Coffee Pvt Ltd", "INV-2026-053", 4_500_000, "2026-04-25"),
     ("Blue Tokai Coffee Pvt Ltd", "INV-2026-054", 20_000_000, "2026-05-20"),
+    # future-due: B3 scenario bands only spread for not-yet-due receivables
+    ("Subko Specialty", "INV-2026-055", 40_000_000, "2026-06-05"),
 ]
 
 

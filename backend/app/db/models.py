@@ -190,6 +190,35 @@ class AuditLog(TimestampedTenanted, Base):
     row_hash: Mapped[str] = mapped_column(String(64))
 
 
+class Forecast(TimestampedTenanted, Base):
+    """B3: one versioned forecast run (lines in ForecastLine)."""
+
+    __tablename__ = "forecasts"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    run_id: Mapped[str] = mapped_column(String(36))
+    horizon_weeks: Mapped[int] = mapped_column(Integer)
+    opening_balance_paise: Mapped[int] = mapped_column(BigInteger)
+    weekly_outflow_paise: Mapped[int] = mapped_column(BigInteger)
+    outflow_basis: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    gap: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    narrative: Mapped[list[str]] = mapped_column(JSON)
+
+
+class ForecastLine(TimestampedTenanted, Base):
+    __tablename__ = "forecast_lines"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    forecast_id: Mapped[str] = mapped_column(ForeignKey("forecasts.id"), index=True)
+    scenario: Mapped[str] = mapped_column(String(10))
+    week: Mapped[int] = mapped_column(Integer)
+    week_start: Mapped[str] = mapped_column(String(10))
+    inflow_paise: Mapped[int] = mapped_column(BigInteger)
+    outflow_paise: Mapped[int] = mapped_column(BigInteger)
+    closing_paise: Mapped[int] = mapped_column(BigInteger)
+    drivers: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+
+
 class StatutoryClock(TimestampedTenanted, Base):
     """B2: one MSME-Act 45-day clock per open receivable (engine-computed)."""
 
