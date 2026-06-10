@@ -243,9 +243,29 @@ export type WcAction = {
   status: string;
 };
 
+export type DataRoom = {
+  generated_at: string;
+  findesk_score: {
+    score: number;
+    components: Record<string, { ratio: number; weight: number; points: number }>;
+  };
+  audit_chain: { ok: boolean; rows: number };
+  evidence: Record<string, string | number | null>;
+  methodology_note: string;
+  shared?: { read_only: boolean; expires_at: number };
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  dataroom: () => request<DataRoom>("GET", apiPaths.GET_DATAROOM),
+  shareDataroom: () =>
+    request<{ share_token: string; expires_in_days: number }>(
+      "POST",
+      apiPaths.POST_DATAROOM_SHARE,
+    ),
+  sharedDataroom: (token: string) =>
+    request<DataRoom>("GET", `${apiPaths.GET_DATAROOM_SHARED}?token=${encodeURIComponent(token)}`),
   wcActions: () => request<WcAction[]>("GET", apiPaths.GET_WC_ACTIONS),
   requestWcAction: (id: string) =>
     request<{ ok: boolean; approval_id: string }>(
