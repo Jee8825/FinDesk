@@ -25,21 +25,32 @@ services:
       interval: 5s
       retries: 10
 
-  # --- services below are enabled as their workspaces land code ----------
-  # backend:
-  #   build: ./backend
-  #   ports: ["8080:8080"]
-  #   env_file: .env
-  #   depends_on: { app-postgres: { condition: service_healthy }, app-redis: { condition: service_healthy } }
-  #
-  # agents-worker:
-  #   build: ./agents
-  #   env_file: .env
-  #   depends_on: { app-redis: { condition: service_healthy } }
-  #
-  # frontend:
-  #   build: ./frontend
-  #   ports: ["3001:3000"]
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    ports: ["8080:8080"]
+    env_file: .env
+    environment:
+      APP_DATABASE_URL: postgresql+asyncpg://findesk:findesk@app-postgres:5432/findesk
+      APP_REDIS_URL: redis://app-redis:6379/0
+    depends_on:
+      app-postgres: { condition: service_healthy }
+      app-redis: { condition: service_healthy }
+
+  agents-worker:
+    build: { context: ., dockerfile: agents/Dockerfile }
+    env_file: .env
+    environment:
+      APP_REDIS_URL: redis://app-redis:6379/0
+    depends_on:
+      app-redis: { condition: service_healthy }
+
+  frontend:
+    build: { context: ., dockerfile: frontend/Dockerfile }
+    ports: ["3001:3001"]
+    environment:
+      BACKEND_URL: http://backend:8080
+    depends_on:
+      - backend
 
 volumes:
   app_pg_data:

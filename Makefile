@@ -17,8 +17,10 @@ dev:           ## install all workspaces that exist
 	done
 	@[ -f frontend/package.json ] && (cd frontend && npm install) || true
 
+PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
 seed:          ## load synthetic SME fixture data (vendors, clients, 6mo txns, planted anomalies)
-	python scripts/seed_dev_data.py
+	$(PY) scripts/seed_dev_data.py
 
 # ----- quality gates (mirror CI) -----------------------------------------
 lint:
@@ -36,7 +38,10 @@ test-int:      ## integration tests (testcontainers)
 	done
 
 contracts:     ## regenerate shared/ from contracts/ (CI fails on drift)
-	python scripts/gen_contracts.py
+	$(PY) scripts/gen_contracts.py
 
 smoke:         ## weekly end-to-end smoke (docs/team/collaboration.md §4)
-	python scripts/smoke_e2e.py
+	$(PY) scripts/smoke_e2e.py
+
+smoke-memory:  ## memory-service smoke (Recall stack must be up)
+	$(PY) scripts/smoke_memory.py

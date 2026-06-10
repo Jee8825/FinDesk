@@ -54,8 +54,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install ruff
-      - run: ruff check backend agents tools shared/py || true  # tighten to hard-fail once packages land
-      # mypy added per-workspace as code lands
+      - run: ruff check backend agents shared/py scripts
+      # mypy added per-workspace as code lands; tools/ joins when scaffolded
 
   test-python:
     needs: changes
@@ -100,9 +100,9 @@ jobs:
         run: pipx run openapi-spec-validator contracts/api.yaml
       - name: Generated code drift
         run: |
-          if [ -f scripts/gen_contracts.py ]; then
-            python scripts/gen_contracts.py && git diff --exit-code shared/
-          else echo "generator not implemented yet"; fi
+          pip install pyyaml
+          python scripts/gen_contracts.py
+          git diff --exit-code shared/ frontend/src/lib/generated/
 
   pr-title:
     if: github.event_name == 'pull_request'
