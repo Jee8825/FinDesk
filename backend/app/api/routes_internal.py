@@ -202,6 +202,91 @@ async def categorize_transactions(
     return CategorizeOut(applied=applied, skipped=len(body.items) - applied)
 
 
+class AnomalyContext(BaseModel):
+    debits: list[dict[str, Any]]
+
+
+@router.get("/anomalies/context", response_model=AnomalyContext)
+async def anomaly_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> AnomalyContext:
+    _check_token(x_internal_token)
+    async with session_scope() as session:
+        debits = await BooksRepo(session).debit_transactions(tenant_id)
+    return AnomalyContext(
+        debits=[
+            {
+                "id": t.id,
+                "value_date": t.value_date.isoformat(),
+                "amount_paise": t.amount_paise,
+                "narration": t.narration,
+                "counterparty_hint": t.counterparty_hint,
+                "category_code": t.category_code,
+            }
+            for t in debits
+        ]
+    )
+
+
+class AnomalyPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    findings: list[dict[str, Any]]
+
+
+class AnomalyPersistOut(BaseModel):
+    created: int
+    existing: int
+
+
+@router.post("/anomalies", response_model=AnomalyPersistOut)
+async def persist_anomalies(
+    body: AnomalyPersist, x_internal_token: str | None = Header(None)
+) -> AnomalyPersistOut:
+    _check_token(x_internal_token)
+    from findesk_shared import uuid7
+    from sqlalchemy import select
+
+    from app.db.models import Anomaly
+    from app.services.audit import write_audit
+
+    created = 0
+    async with session_scope() as session:
+        known = {
+            row.dedupe_key
+            for row in await session.scalars(
+                select(Anomaly).where(Anomaly.tenant_id == body.tenant_id)
+            )
+        }
+        for f in body.findings:
+            if f["dedupe_key"] in known:
+                continue
+            session.add(
+                Anomaly(
+                    id=uuid7(),
+                    tenant_id=body.tenant_id,
+                    kind=f["kind"],
+                    severity=f.get("severity", "medium"),
+                    vendor_label=f["vendor_label"][:80],
+                    evidence=f["evidence"],
+                    recommended_action=f["recommended_action"][:300],
+                    recoverable_paise=f.get("recoverable_paise"),
+                    dedupe_key=f["dedupe_key"],
+                )
+            )
+            created += 1
+        if created:
+            await write_audit(
+                session,
+                tenant_id=body.tenant_id,
+                actor={"kind": "agent", "run_id": body.run_id},
+                action="anomalies.raised",
+                entity_ref=f"run:{body.run_id}",
+                payload={"created": created},
+            )
+    return AnomalyPersistOut(created=created, existing=len(body.findings) - created)
+
+
 class CommitRequest(BaseModel):
     tenant_id: str
     run_id: str

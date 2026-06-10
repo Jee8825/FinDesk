@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.routes_agent import router as agent_router
+from app.api.routes_anomalies import router as anomalies_router
 from app.api.routes_approvals import router as approvals_router
 from app.api.routes_books import router as books_router
 from app.api.routes_conflicts import router as conflicts_router
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(books_router, prefix=prefix)
     app.include_router(approvals_router, prefix=prefix)
     app.include_router(conflicts_router, prefix=prefix)
+    app.include_router(anomalies_router, prefix=prefix)
     app.include_router(why_router, prefix=prefix)
     app.include_router(internal_router)  # worker-only, shared-token auth
     return app

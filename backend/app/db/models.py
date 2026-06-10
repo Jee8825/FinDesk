@@ -177,6 +177,23 @@ class AuditLog(TimestampedTenanted, Base):
     row_hash: Mapped[str] = mapped_column(String(64))
 
 
+class Anomaly(TimestampedTenanted, Base):
+    """A6 anomaly cards — duplicates, overcharges, out-of-pattern spend."""
+
+    __tablename__ = "anomalies"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)  # duplicate|overcharge|out_of_pattern
+    severity: Mapped[str] = mapped_column(String(8), default="medium")  # low|medium|high
+    vendor_label: Mapped[str] = mapped_column(String(80))
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON)  # txn refs, amounts, baseline
+    recommended_action: Mapped[str] = mapped_column(String(300))
+    recoverable_paise: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)
+    decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(64), unique=True)  # stable across rescans
+
+
 class Conflict(TimestampedTenanted, Base):
     """A4 conflict cards — materialized from Recall's conflict log."""
 

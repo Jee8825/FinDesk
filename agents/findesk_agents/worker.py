@@ -18,6 +18,8 @@ from findesk_shared import uuid7
 from findesk_agents.backend_client import BackendClient
 from findesk_agents.config import get_settings
 from findesk_agents.events import RedisEventEmitter
+from findesk_agents.graphs.anomaly_scan import graph as anomaly_graph
+from findesk_agents.graphs.anomaly_scan.state import AnomalyState
 from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
@@ -47,6 +49,20 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
             )
             final = await ping_graph.run(state)
             await emitter.done("succeeded", summary=final.summary)
+        elif event.startswith("job.anomaly_scan."):
+            backend = BackendClient()
+            try:
+                anomaly_state = AnomalyState(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    emitter=emitter,
+                    backend=backend,
+                    memory=MemoryClient(),
+                )
+                anomaly_final = await anomaly_graph.run(anomaly_state)
+                await emitter.done("succeeded", summary=anomaly_final.summary)
+            finally:
+                await backend.aclose()
         elif event.startswith("job.reconciliation."):
             backend = BackendClient()
             try:

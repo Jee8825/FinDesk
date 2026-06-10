@@ -112,9 +112,30 @@ export type ConflictCard = {
   created_at: string;
 };
 
+export type AnomalyCard = {
+  id: string;
+  kind: string;
+  severity: string;
+  vendor_label: string;
+  evidence: Record<string, unknown>;
+  recommended_action: string;
+  recoverable_paise: number | null;
+  status: string;
+  created_at: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  anomalies: () => request<AnomalyCard[]>("GET", apiPaths.GET_ANOMALIES),
+  decideAnomaly: (id: string, decision: "accepted" | "dismissed" | "recovered") =>
+    request<{ ok: boolean }>(
+      "POST",
+      apiPaths.POST_ANOMALIES_ANOMALY_ID_DECIDE.replace("{anomaly_id}", id),
+      { decision },
+    ),
+  startRunByGraph: (graph: string) =>
+    request<RunOut>("POST", apiPaths.POST_AGENT_RUNS, { graph, params: {} }),
   conflicts: () => request<ConflictCard[]>("GET", apiPaths.GET_CONFLICTS),
   resolveConflict: (id: string, winner: "a" | "b", rationale?: string) =>
     request<{ ok: boolean; kept: string }>(

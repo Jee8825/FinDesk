@@ -18,7 +18,8 @@ from app.events.streams import enqueue_job, subscribe_run
 
 router = APIRouter(tags=["agent"])
 
-KNOWN_GRAPHS = {"ping", "reconciliation"}  # grows as graphs land (docs/architecture/01 §2)
+# grows as graphs land (docs/architecture/01 §2)
+KNOWN_GRAPHS = {"ping", "reconciliation", "anomaly_scan"}
 
 
 class RunCreate(BaseModel):
