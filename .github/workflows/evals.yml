@@ -1,0 +1,26 @@
+name: evals
+
+on:
+  schedule:
+    - cron: "30 21 * * *" # 03:00 IST nightly
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "agents/findesk_agents/graphs/reconciliation/**"
+      - "infra/observability/evals/**"
+
+jobs:
+  recon-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install ./shared/py ./agents
+      - name: Reconciliation accuracy harness
+        run: python infra/observability/evals/run_recon_eval.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recon-eval-report
+          path: infra/observability/evals/evals_out/recon_eval.json
