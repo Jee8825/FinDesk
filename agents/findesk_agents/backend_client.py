@@ -42,6 +42,23 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def collections_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get(
+            "/internal/collections/context", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def queue_email_approvals(
+        self, tenant_id: str, run_id: str, drafts: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/collections/queue",
+            json={"tenant_id": tenant_id, "run_id": run_id, "drafts": drafts},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def anomaly_context(self, tenant_id: str) -> dict[str, Any]:
         resp = await self._client.get(
             "/internal/anomalies/context", params={"tenant_id": tenant_id}

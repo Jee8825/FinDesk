@@ -121,7 +121,15 @@ async def ensure_books(session, tenant_id: str) -> None:
     for name in CLIENTS:
         pid = uuid7()
         party_ids[name] = pid
-        session.add(Counterparty(id=pid, tenant_id=tenant_id, kind="client", name=name))
+        session.add(
+            Counterparty(
+                id=pid,
+                tenant_id=tenant_id,
+                kind="client",
+                name=name,
+                contacts={"emails": [_demo_email(name)]},
+            )
+        )
     for name in VENDORS:
         session.add(Counterparty(id=uuid7(), tenant_id=tenant_id, kind="vendor", name=name))
     await session.flush()
@@ -157,6 +165,26 @@ CHART_OF_ACCOUNTS = [
     ("marketing", "Marketing & Ads", "expense"),
     ("misc_expense", "Miscellaneous Expense", "expense"),
 ]
+
+
+def _demo_email(name: str) -> str:
+    slug = "".join(c for c in name.lower() if c.isalnum() or c == " ").split()
+    return f"accounts@{'-'.join(slug[:2])}.demo.findesk.in"
+
+
+async def ensure_contacts(session, tenant_id: str) -> None:
+    """Backfill contact emails on counterparties seeded before Phase 3b."""
+    updated = 0
+    for c in await session.scalars(
+        select(Counterparty).where(
+            Counterparty.tenant_id == tenant_id, Counterparty.kind == "client"
+        )
+    ):
+        if not (c.contacts or {}).get("emails"):
+            c.contacts = {"emails": [_demo_email(c.name)]}
+            updated += 1
+    if updated:
+        print(f"backfilled contact emails on {updated} clients")
 
 
 async def ensure_chart(session, tenant_id: str) -> None:
@@ -212,6 +240,7 @@ async def main() -> None:
         await session.flush()
         await ensure_late_invoices(session, tenant_id)
         await ensure_chart(session, tenant_id)
+        await ensure_contacts(session, tenant_id)
     await dispose_engine()
 
 

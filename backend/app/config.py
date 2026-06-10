@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-secret"
     internal_api_token: str = "dev-internal-token"  # worker ↔ backend internal API
     upload_dir: str = "var/uploads"  # dev only; object storage in staging/prod
+    outbox_dir: str = "var/outbox"  # sandbox email delivery (dev/staging)
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_days: int = 14
 
