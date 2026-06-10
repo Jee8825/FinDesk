@@ -110,6 +110,56 @@ async def decide_approval(
     )
 
     result: dict[str, Any] = {"ok": True, "status": decision, "token_id": token_id}
+    if approval.action_kind == "treds_listing":
+        from sqlalchemy import select as _select
+
+        from app.db.models import WcAction
+
+        payload = approval.action_payload
+        wc_action = await session.scalar(
+            _select(WcAction).where(
+                WcAction.id == payload.get("wc_action_id"),
+                WcAction.tenant_id == tenant_id,
+            )
+        )
+        if decision == "rejected":
+            if wc_action is not None:
+                wc_action.status = "rejected"
+        else:
+            from findesk_tools.treds import SandboxTredsProvider, TredsQuote
+
+            receipt = SandboxTredsProvider().list_invoice(
+                tenant_id=tenant_id,
+                quote=TredsQuote(**payload["quote"]),
+                approval_token=token_id,
+            )
+            await write_audit(
+                session,
+                tenant_id=tenant_id,
+                actor={"kind": "user", "id": decider_id},
+                action="treds.listed",
+                entity_ref=f"invoice:{payload.get('invoice_id')}",
+                payload={
+                    "listing_id": receipt.listing_id,
+                    "platform": receipt.platform,
+                    "unlock_paise": receipt.unlock_paise,
+                    "cost_paise": payload.get("cost_paise"),
+                    "approval_id": approval.id,
+                    "token_id": token_id,
+                },
+            )
+            if wc_action is not None:
+                wc_action.status = "executed"
+                wc_action.execution = {
+                    "listing_id": receipt.listing_id,
+                    "platform": receipt.platform,
+                    "unlock_paise": receipt.unlock_paise,
+                }
+            result["execution"] = {
+                "listed": True,
+                "listing_id": receipt.listing_id,
+                "unlock_paise": receipt.unlock_paise,
+            }
     if decision == "approved" and approval.action_kind == "send_email":
         from findesk_tools.email import EmailDraft, SandboxEmailProvider
 

@@ -17,6 +17,7 @@ from app.api.routes_forecast import router as forecast_router
 from app.api.routes_internal import router as internal_router
 from app.api.routes_radar import router as radar_router
 from app.api.routes_reports import router as reports_router
+from app.api.routes_wc_actions import router as wc_actions_router
 from app.api.routes_why import router as why_router
 from app.auth.routes import router as auth_router
 from app.db import dispose_engine
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(reports_router, prefix=prefix)
     app.include_router(radar_router, prefix=prefix)
     app.include_router(forecast_router, prefix=prefix)
+    app.include_router(wc_actions_router, prefix=prefix)
     app.include_router(why_router, prefix=prefix)
     app.include_router(internal_router)  # worker-only, shared-token auth
     return app

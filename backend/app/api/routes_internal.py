@@ -392,6 +392,69 @@ async def persist_forecast(
     return {"forecast_id": forecast.id}
 
 
+@router.get("/forecast/latest-gap")
+async def latest_gap(tenant_id: str, x_internal_token: str | None = Header(None)) -> dict[str, Any]:
+    _check_token(x_internal_token)
+    from sqlalchemy import select
+
+    from app.db.models import Forecast
+
+    async with session_scope() as session:
+        forecast = await session.scalar(
+            select(Forecast)
+            .where(Forecast.tenant_id == tenant_id)
+            .order_by(Forecast.created_at.desc())
+            .limit(1)
+        )
+    return {"gap": forecast.gap if forecast else None}
+
+
+class WcPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    options: list[dict[str, Any]]
+
+
+@router.post("/wc-actions")
+async def persist_wc_actions(
+    body: WcPersist, x_internal_token: str | None = Header(None)
+) -> dict[str, Any]:
+    _check_token(x_internal_token)
+    from findesk_shared import uuid7
+    from sqlalchemy import select
+
+    from app.db.models import WcAction
+
+    created = 0
+    async with session_scope() as session:
+        # a fresh run supersedes earlier still-proposed options
+        stale = await session.scalars(
+            select(WcAction).where(
+                WcAction.tenant_id == body.tenant_id, WcAction.status == "proposed"
+            )
+        )
+        for row in stale:
+            row.status = "stale"
+        for option in body.options:
+            session.add(
+                WcAction(
+                    id=uuid7(),
+                    tenant_id=body.tenant_id,
+                    run_id=body.run_id,
+                    kind=option["kind"],
+                    invoice_id=option["invoice_id"],
+                    invoice_number=option["invoice_number"],
+                    client=option["client"],
+                    unlock_paise=option["unlock_paise"],
+                    cost_paise=option["cost_paise"],
+                    rank=option["rank"],
+                    detail=option["detail"],
+                )
+            )
+            created += 1
+    return {"created": created, "existing": 0}
+
+
 class CollectionsContext(BaseModel):
     overdue: list[dict[str, Any]]
     sender_name: str

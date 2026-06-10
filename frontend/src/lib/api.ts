@@ -225,9 +225,33 @@ export type ForecastOut = {
   scenarios: Record<string, ForecastWeek[]>;
 };
 
+export type WcAction = {
+  id: string;
+  kind: string;
+  invoice_number: string;
+  client: string;
+  unlock_paise: number;
+  cost_paise: number;
+  rank: number;
+  detail: {
+    quote?: { tenor_days: number; discount_rate_bps_annual: number };
+    predicted_payment?: string;
+    days_to_cash_without_action?: number;
+    days_overdue?: number;
+    note?: string;
+  };
+  status: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  wcActions: () => request<WcAction[]>("GET", apiPaths.GET_WC_ACTIONS),
+  requestWcAction: (id: string) =>
+    request<{ ok: boolean; approval_id: string }>(
+      "POST",
+      apiPaths.POST_WC_ACTIONS_ACTION_ID_REQUEST.replace("{action_id}", id),
+    ),
   forecast: () => request<ForecastOut>("GET", apiPaths.GET_FORECAST),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   monthEndReport: (period: string) =>

@@ -97,6 +97,11 @@ paths:
     get: { tags: [cash], summary: 45-day clocks, accrued interest, escalation states, responses: { "200": { description: radar } } }
   /wc-actions:
     get: { tags: [cash], summary: Ranked working-capital options, responses: { "200": { description: page } } }
+  /wc-actions/{action_id}/request:
+    post:
+      tags: [cash]
+      summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
+      responses: { "200": { description: queued } }
 
   /why/{entity_type}/{entity_id}:
     get:
