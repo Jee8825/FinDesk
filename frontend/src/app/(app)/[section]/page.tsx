@@ -2,7 +2,6 @@
 // (docs/team/implementation-roadmap.md). Each gets its real feature folder
 // under src/features/<area> when its phase starts.
 const SECTIONS: Record<string, { title: string; phase: string; blurb: string }> = {
-  anomalies: { title: "Anomalies", phase: "Phase 3", blurb: "Duplicates, overcharges and out-of-pattern spend — with recoverable money flagged." },
   receivables: { title: "Receivables", phase: "Phase 3–4", blurb: "45-day statutory radar and relationship-calibrated chasing." },
   forecast: { title: "Forecast", phase: "Phase 4", blurb: "4/13-week scenario cash forecast with confidence bands." },
   actions: { title: "Working capital", phase: "Phase 4", blurb: "Costed, ranked actions: TReDS, collections, re-timing." },

@@ -42,6 +42,23 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def anomaly_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get(
+            "/internal/anomalies/context", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def persist_anomalies(
+        self, tenant_id: str, run_id: str, findings: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/anomalies",
+            json={"tenant_id": tenant_id, "run_id": run_id, "findings": findings},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def categorize(
         self, tenant_id: str, run_id: str, items: list[dict[str, Any]]
     ) -> dict[str, Any]:

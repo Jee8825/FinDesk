@@ -27,3 +27,16 @@ def test_format_inr_lakh_crore_grouping():
 
 def test_paise_to_rupees_exact():
     assert str(paise_to_rupees(4410000)) == "44100"
+
+
+def test_vendor_slug_strips_billing_cycle_noise():
+    from findesk_shared import vendor_slug
+
+    assert (
+        vendor_slug(None, "AWS INDIA CLOUD SERVICES APR")
+        == vendor_slug(None, "AWS INDIA CLOUD SERVICES JUL")
+        == "aws-india-cloud-services"
+    )
+    assert vendor_slug("BLUE TOKAI COFFEE") == "blue-tokai-coffee"
+    assert vendor_slug(None, "TDS DEPOSIT 194C Q1") == "tds-deposit-194c"
+    assert vendor_slug(None, "") == "unknown"
