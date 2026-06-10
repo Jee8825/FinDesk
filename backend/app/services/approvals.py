@@ -110,6 +110,51 @@ async def decide_approval(
     )
 
     result: dict[str, Any] = {"ok": True, "status": decision, "token_id": token_id}
+    if decision == "approved" and approval.action_kind == "send_email":
+        from findesk_tools.email import EmailDraft, SandboxEmailProvider
+
+        from app import memoryclient
+        from app.config import get_settings
+
+        payload = approval.action_payload
+        draft = EmailDraft(
+            to=payload["to"],
+            subject=payload["subject"],
+            body_md=payload["body_md"],
+            thread_ref=payload.get("thread_ref"),
+        )
+        # token consumed here: it exists only for this send and is recorded on
+        # the message, the approval row, and the audit chain
+        receipt = SandboxEmailProvider(get_settings().outbox_dir).send(
+            tenant_id=tenant_id, draft=draft, approval_token=token_id
+        )
+        await write_audit(
+            session,
+            tenant_id=tenant_id,
+            actor={"kind": "user", "id": decider_id},
+            action="email.sent",
+            entity_ref=f"invoice:{payload.get('invoice_id')}",
+            payload={
+                "message_id": receipt.message_id,
+                "provider": receipt.provider,
+                "to": payload["to"],
+                "subject": payload["subject"],
+                "tone": payload.get("tone"),
+                "approval_id": approval.id,
+                "token_id": token_id,
+            },
+        )
+        await memoryclient.remember(
+            tenant_id=tenant_id,
+            scope_key=f"client:{payload.get('counterparty_id')}",
+            session_id=approval.requested_by.get("run_id") or f"approval:{approval.id}",
+            content=(
+                f"A {payload.get('tone', 'neutral')} payment reminder for invoice "
+                f"{payload.get('invoice_number')} was sent on approval "
+                f"({payload.get('days_overdue')} days overdue at the time)."
+            ),
+        )
+        result["execution"] = {"sent": True, "message_id": receipt.message_id}
     if decision == "approved" and approval.action_kind == "commit_match":
         from app.services.recon import commit_proposal  # local import: avoids cycle
 

@@ -287,6 +287,116 @@ async def persist_anomalies(
     return AnomalyPersistOut(created=created, existing=len(body.findings) - created)
 
 
+class CollectionsContext(BaseModel):
+    overdue: list[dict[str, Any]]
+    sender_name: str
+
+
+@router.get("/collections/context", response_model=CollectionsContext)
+async def collections_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> CollectionsContext:
+    _check_token(x_internal_token)
+    from datetime import UTC
+
+    now = datetime.now(UTC)
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        invoices = await repo.open_invoices(tenant_id)
+        parties = {c.id: c for c in await repo.counterparties(tenant_id)}
+        from app.db.repositories import TenantRepo
+
+        tenant = await TenantRepo(session).by_id(tenant_id)
+    overdue = []
+    for inv in invoices:
+        if inv.due_date >= now:
+            continue
+        client = parties.get(inv.counterparty_id)
+        if client is None:
+            continue
+        overdue.append(
+            {
+                "invoice": {
+                    "id": inv.id,
+                    "number": inv.number,
+                    "amount_paise": inv.amount_paise,
+                    "due_date": inv.due_date.isoformat(),
+                },
+                "client": {
+                    "id": client.id,
+                    "name": client.name,
+                    "emails": (client.contacts or {}).get("emails", []),
+                },
+            }
+        )
+    sender = f"Accounts, {tenant.name}" if tenant else "Accounts"
+    return CollectionsContext(overdue=overdue, sender_name=sender)
+
+
+class EmailQueueRequest(BaseModel):
+    tenant_id: str
+    run_id: str
+    drafts: list[dict[str, Any]]
+
+
+class EmailQueueOut(BaseModel):
+    queued: int
+    duplicates: int
+
+
+@router.post("/collections/queue", response_model=EmailQueueOut)
+async def queue_email_drafts(
+    body: EmailQueueRequest, x_internal_token: str | None = Header(None)
+) -> EmailQueueOut:
+    _check_token(x_internal_token)
+    from sqlalchemy import select
+
+    from app.db.models import Approval
+    from app.services.approvals import queue_approval
+
+    queued = 0
+    async with session_scope() as session:
+        pending = await session.scalars(
+            select(Approval).where(
+                Approval.tenant_id == body.tenant_id,
+                Approval.action_kind == "send_email",
+                Approval.status == "pending",
+            )
+        )
+        pending_invoices = {a.action_payload.get("invoice_id") for a in pending}
+        # cooldown: an invoice chased in the last 7 days isn't chased again
+        from datetime import UTC, timedelta
+
+        from app.db.models import AuditLog
+
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+        recently_sent = await session.scalars(
+            select(AuditLog).where(
+                AuditLog.tenant_id == body.tenant_id,
+                AuditLog.action == "email.sent",
+                AuditLog.created_at > cutoff,
+            )
+        )
+        cooled_down = {r.entity_ref.removeprefix("invoice:") for r in recently_sent}
+        for draft in body.drafts:
+            if draft.get("invoice_id") in pending_invoices | cooled_down:
+                continue
+            await queue_approval(
+                session,
+                tenant_id=body.tenant_id,
+                action_kind="send_email",
+                action_payload=draft,
+                requested_by={"kind": "agent", "run_id": body.run_id},
+                policy_verdicts={
+                    "rule": "external communication is always human-gated (P2)",
+                    "tone": draft.get("tone"),
+                    "days_overdue": draft.get("days_overdue"),
+                },
+            )
+            queued += 1
+    return EmailQueueOut(queued=queued, duplicates=len(body.drafts) - queued)
+
+
 class CommitRequest(BaseModel):
     tenant_id: str
     run_id: str

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FinDesk tool layer — typed connectors per contracts/tools.md"
 requires-python = ">=3.11"
 dependencies = [
-  "pydantic>=2.8",
+  "pydantic[email]>=2.8",
   "findesk-shared",
 ]
 

@@ -16,6 +16,53 @@ function ApprovalCard({ approval }: { approval: Approval }) {
   const isTds = p.kind === "tds_adjusted";
   const invoiceTotal = (p.amount_paise ?? 0) + (p.tds_paise ?? 0);
 
+  if (approval.action_kind === "send_email") {
+    const to = (p.to as string[] | undefined) ?? [];
+    return (
+      <li className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-ink">
+              Send payment reminder
+              <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                {String(p.tone ?? "neutral")} tone
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              to {to.join(", ")} · {String(p.invoice_number)} ·{" "}
+              {String(approval.policy_verdicts.days_overdue)} days overdue
+            </p>
+            <p className="mt-2 text-sm font-medium text-slate-700">{String(p.subject)}</p>
+            <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+              {String(p.body_md)}
+            </pre>
+          </div>
+          <div className="flex shrink-0 flex-col gap-2">
+            <button
+              onClick={() => decide.mutate({ decision: "approved" })}
+              disabled={decide.isPending}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Approve & send
+            </button>
+            <button
+              onClick={() => decide.mutate({ decision: "rejected" })}
+              disabled={decide.isPending}
+              className="rounded-md border px-3 py-1.5 text-sm text-slate-600 disabled:opacity-50"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+        {decide.isError && (
+          <p className="mt-2 text-sm text-red-600" role="alert">
+            {decide.error instanceof Error ? decide.error.message : "decision failed"}
+          </p>
+        )}
+      </li>
+    );
+  }
+
   return (
     <li className="rounded-xl border bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
