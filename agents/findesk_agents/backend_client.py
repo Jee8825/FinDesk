@@ -42,6 +42,16 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def categorize(
+        self, tenant_id: str, run_id: str, items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/recon/categorize",
+            json={"tenant_id": tenant_id, "run_id": run_id, "items": items},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def commit(
         self, tenant_id: str, run_id: str, proposals: list[dict[str, Any]]
     ) -> dict[str, Any]:

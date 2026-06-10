@@ -12,6 +12,7 @@ from app.db.models import (
     AuditLog,
     BankAccount,
     BankTransaction,
+    ChartAccount,
     Counterparty,
     Document,
     Invoice,
@@ -101,6 +102,64 @@ class BooksRepo:
             .where(BankTransaction.id == txn_id)
             .values(match_status="matched")
         )
+
+    # ---- categorization -----------------------------------------------------
+    async def chart_accounts(self, tenant_id: str) -> list[ChartAccount]:
+        return list(
+            await self.session.scalars(
+                select(ChartAccount)
+                .where(ChartAccount.tenant_id == tenant_id)
+                .order_by(ChartAccount.code)
+            )
+        )
+
+    async def uncategorized_debits(self, tenant_id: str) -> list[BankTransaction]:
+        return list(
+            await self.session.scalars(
+                select(BankTransaction).where(
+                    BankTransaction.tenant_id == tenant_id,
+                    BankTransaction.direction == "dr",
+                    BankTransaction.category_code.is_(None),
+                )
+            )
+        )
+
+    async def debit_transactions(self, tenant_id: str) -> list[BankTransaction]:
+        return list(
+            await self.session.scalars(
+                select(BankTransaction).where(
+                    BankTransaction.tenant_id == tenant_id, BankTransaction.direction == "dr"
+                )
+            )
+        )
+
+    async def transaction(self, txn_id: str, tenant_id: str) -> BankTransaction | None:
+        return await self.session.scalar(
+            select(BankTransaction).where(
+                BankTransaction.id == txn_id, BankTransaction.tenant_id == tenant_id
+            )
+        )
+
+    async def set_category(
+        self,
+        txn_id: str,
+        *,
+        code: str,
+        source: str,
+        confidence: float,
+        overwrite_human: bool = False,
+    ) -> bool:
+        """Set a category; agent sources never overwrite a human decision."""
+        q = update(BankTransaction).where(BankTransaction.id == txn_id)
+        if not overwrite_human:
+            q = q.where(
+                (BankTransaction.category_source.is_(None))
+                | (BankTransaction.category_source != "human")
+            )
+        result = await self.session.execute(
+            q.values(category_code=code, category_source=source, category_confidence=confidence)
+        )
+        return bool(result.rowcount)
 
     # ---- invoices ----------------------------------------------------------
     async def open_invoices(self, tenant_id: str) -> list[Invoice]:

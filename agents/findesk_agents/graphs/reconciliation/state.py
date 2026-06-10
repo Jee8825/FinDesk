@@ -27,6 +27,8 @@ class ReconState(BaseModel):
     ingested: dict[str, int] = Field(default_factory=dict)
     context: dict[str, Any] = Field(default_factory=dict)
     proposals: list[dict[str, Any]] = Field(default_factory=list)
+    categorized: list[dict[str, Any]] = Field(default_factory=list)
+    vendor_claims_known: list[str] = Field(default_factory=list)  # slugs with existing claims
     commit_result: dict[str, Any] = Field(default_factory=dict)
     memory_notes: list[str] = Field(default_factory=list)
     summary: str = ""

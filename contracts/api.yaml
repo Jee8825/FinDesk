@@ -50,6 +50,13 @@ paths:
     post: { tags: [books], summary: Upload statement/export file → 202 + run_id, responses: { "202": { description: queued } } }
   /books/exceptions:
     get: { tags: [books], summary: Unmatched residuals queue, responses: { "200": { description: page } } }
+  /books/chart-of-accounts:
+    get: { tags: [books], summary: Tenant chart of accounts, responses: { "200": { description: accounts } } }
+  /books/transactions/{txn_id}/category:
+    patch:
+      tags: [books]
+      summary: Human category correction — also writes a vendor_category memory claim
+      responses: { "200": { description: corrected } }
   /reports/month-end:
     get: { tags: [books], summary: Month-end pack for a period, responses: { "200": { description: pack } } }
 

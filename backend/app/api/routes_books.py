@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
-from findesk_shared import uuid7
+from findesk_shared import uuid7, vendor_scope
 from pydantic import BaseModel
 
 from app.auth.deps import Auth
@@ -37,6 +37,8 @@ class TxnOut(BaseModel):
     narration: str
     counterparty_hint: str | None
     match_status: str
+    category_code: str | None = None
+    category_source: str | None = None
 
 
 class TxnPage(BaseModel):
@@ -54,6 +56,8 @@ def _txn_out(t: Any) -> TxnOut:
         narration=t.narration,
         counterparty_hint=t.counterparty_hint,
         match_status=t.match_status,
+        category_code=t.category_code,
+        category_source=t.category_source,
     )
 
 
@@ -126,7 +130,68 @@ async def list_transactions(
     return TxnPage(items=[_txn_out(t) for t in txns], next_cursor=next_cursor, counts=counts)
 
 
-@router.get("/books/exceptions", response_model=TxnPage)
+class ChartAccountOut(BaseModel):
+    code: str
+    name: str
+    type: str
+
+
+@router.get("/books/chart-of-accounts", response_model=list[ChartAccountOut])
+async def chart_of_accounts(auth: Auth) -> list[ChartAccountOut]:
+    async with session_scope() as session:
+        rows = await BooksRepo(session).chart_accounts(auth.tenant_id)
+        return [ChartAccountOut(code=c.code, name=c.name, type=c.type) for c in rows]
+
+
+class CategoryPatch(BaseModel):
+    category_code: str
+
+
+@router.patch("/books/transactions/{txn_id}/category")
+async def correct_category(txn_id: str, body: CategoryPatch, auth: Auth) -> dict[str, Any]:
+    if auth.role == "viewer":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "viewers cannot categorize")
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        valid = {c.code for c in await repo.chart_accounts(auth.tenant_id)}
+        if body.category_code not in valid:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "unknown category code")
+        txn = await repo.transaction(txn_id, auth.tenant_id)
+        if txn is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "transaction not found")
+        previous = txn.category_code
+        await repo.set_category(
+            txn_id,
+            code=body.category_code,
+            source="human",
+            confidence=1.0,
+            overwrite_human=True,
+        )
+        await write_audit(
+            session,
+            tenant_id=auth.tenant_id,
+            actor={"kind": "user", "id": auth.user_id},
+            action="transaction.category_corrected",
+            entity_ref=f"bank_transaction:{txn_id}",
+            payload={"from": previous, "to": body.category_code},
+        )
+        narration = txn.narration
+        hint = txn.counterparty_hint
+
+    # human corrections become vendor_category memory — this is how the agent
+    # learns the tenant's taxonomy (crystallizes after repeated corroboration)
+    from app import memoryclient
+
+    await memoryclient.remember(
+        tenant_id=auth.tenant_id,
+        scope_key=vendor_scope(hint, narration),
+        session_id=f"correction:{txn_id}",
+        content=(
+            f"Vendor '{hint or narration[:40]}' expenses are categorized as "
+            f"{body.category_code} (set by human correction)."
+        ),
+    )
+    return {"ok": True, "category_code": body.category_code}
 async def list_exceptions(auth: Auth) -> TxnPage:
     async with session_scope() as session:
         repo = BooksRepo(session)

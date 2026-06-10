@@ -1,15 +1,56 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { useRunStream } from "@/hooks/useRunStream";
-import { api, formatINR } from "@/lib/api";
+import { api, formatINR, type ChartAccount, type TxnPage } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, string> = {
   matched: "bg-emerald-50 text-emerald-700",
   unmatched: "bg-amber-50 text-amber-700",
 };
+
+function CategoryCell({
+  txn,
+  accounts,
+}: {
+  txn: TxnPage["items"][number];
+  accounts: ChartAccount[];
+}) {
+  const queryClient = useQueryClient();
+  const correct = useMutation({
+    mutationFn: (code: string) => api.correctCategory(txn.id, code),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+  });
+
+  if (txn.direction !== "dr") return <span className="text-slate-300">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <select
+        value={txn.category_code ?? ""}
+        onChange={(e) => e.target.value && correct.mutate(e.target.value)}
+        disabled={correct.isPending}
+        className={`max-w-36 rounded-md border px-1.5 py-0.5 text-xs ${
+          txn.category_code ? "border-slate-200 text-slate-700" : "border-amber-300 text-amber-700"
+        }`}
+        aria-label="expense category"
+      >
+        <option value="">uncategorized</option>
+        {accounts.map((a) => (
+          <option key={a.code} value={a.code}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      {txn.category_source && (
+        <span className="text-[10px] uppercase text-slate-400" title="who categorized this">
+          {txn.category_source}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export default function BooksPage() {
   const queryClient = useQueryClient();
@@ -23,6 +64,11 @@ export default function BooksPage() {
     queryKey: ["transactions"],
     queryFn: () => api.transactions(),
     refetchInterval: runId && !done ? 2000 : false,
+  });
+  const accounts = useQuery({
+    queryKey: ["chart-of-accounts"],
+    queryFn: () => api.chartOfAccounts(),
+    staleTime: 60_000,
   });
 
   async function upload(file: File) {
@@ -133,6 +179,7 @@ export default function BooksPage() {
                   <th className="px-4 py-2">Date</th>
                   <th className="px-4 py-2">Narration</th>
                   <th className="px-4 py-2 text-right">Amount</th>
+                  <th className="px-4 py-2">Category</th>
                   <th className="px-4 py-2">Status</th>
                 </tr>
               </thead>
@@ -150,6 +197,9 @@ export default function BooksPage() {
                     >
                       {t.direction === "cr" ? "+" : "−"}
                       {formatINR(t.amount_paise)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <CategoryCell txn={t} accounts={accounts.data ?? []} />
                     </td>
                     <td className="px-4 py-2">
                       <span

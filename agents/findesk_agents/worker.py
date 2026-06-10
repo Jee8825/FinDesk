@@ -53,7 +53,7 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
                 recon_state = ReconState(
                     tenant_id=tenant_id,
                     run_id=run_id,
-                    document_id=payload["document_id"],
+                    document_id=payload.get("document_id") or "",  # empty = sweep run
                     emitter=emitter,
                     backend=backend,
                     memory=MemoryClient(),
