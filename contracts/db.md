@@ -4,8 +4,8 @@
 > `0002` (books: counterparties, bank_accounts, bank_transactions, invoices,
 > matches, ledger_entries, audit_log, documents) `0003` (approvals queue
 > with hash-bound single-use tokens), `0004` (conflict cards), `0005`
-> (chart_of_accounts + transaction categorization) and `0006` (anomaly cards)
-> are live. Tables carry the subset of
+> (chart_of_accounts + transaction categorization) `0006` (anomaly cards) and `0007`
+> (invoice acceptance dates + statutory clocks) are live. Tables carry the subset of
 > columns their shipped features need (e.g. `invoices` gains gst/tds/irn in
 > Phase 3); this file describes the target shape.
 

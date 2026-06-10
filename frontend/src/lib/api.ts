@@ -175,9 +175,33 @@ export type WhyEvent = {
   row_hash: string;
 };
 
+export type RadarItem = {
+  invoice_id: string;
+  invoice_number: string;
+  client: string;
+  amount_paise: number;
+  clock: {
+    statutory_due_date: string;
+    overdue_days: number;
+    accrued_interest_paise: number;
+    annual_rate_bps: number;
+    escalation_level: string;
+  };
+  predicted_payment_date: string | null;
+  avg_days_late: number | null;
+  behavior_observations: number;
+};
+
+export type RadarOut = {
+  items: RadarItem[];
+  totals: { overdue_paise: number; accrued_interest_paise: number };
+  ca_note: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",

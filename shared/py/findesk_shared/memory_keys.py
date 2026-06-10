@@ -32,3 +32,22 @@ def vendor_slug(hint: str | None, narration: str = "") -> str:
 
 def vendor_scope(hint: str | None, narration: str = "") -> str:
     return f"vendor:{vendor_slug(hint, narration)}"
+
+
+_LATE_RE = re.compile(r"paid\s+(\d+)\s+days?\s+(late|early)")
+
+
+def parse_late_days(contents: list[str]) -> list[int]:
+    """Extract payment-timing observations from memory claim texts.
+
+    'paid N days late' → +N, 'paid N days early' → −N. The claim wording is
+    written by the learn paths; this parser is their read-side twin — they
+    live in shared so they cannot drift apart.
+    """
+    out = []
+    for c in contents:
+        m = _LATE_RE.search(c)
+        if m:
+            n = int(m.group(1))
+            out.append(n if m.group(2) == "late" else -n)
+    return out
