@@ -9,6 +9,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.routes_agent import router as agent_router
+from app.api.routes_books import router as books_router
+from app.api.routes_internal import router as internal_router
+from app.api.routes_why import router as why_router
 from app.auth.routes import router as auth_router
 from app.db import dispose_engine
 from app.events.streams import close_redis, consume_run_events
@@ -37,6 +40,9 @@ def create_app() -> FastAPI:
     prefix = "/api/v1"
     app.include_router(auth_router, prefix=prefix)
     app.include_router(agent_router, prefix=prefix)
+    app.include_router(books_router, prefix=prefix)
+    app.include_router(why_router, prefix=prefix)
+    app.include_router(internal_router)  # worker-only, shared-token auth
     return app
 
 
