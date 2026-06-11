@@ -96,12 +96,16 @@ class BooksRepo:
         )
         return {status: count for status, count in rows}
 
-    async def set_transaction_matched(self, txn_id: str) -> None:
-        await self.session.execute(
+    async def set_transaction_matched(self, txn_id: str) -> bool:
+        """Guarded transition unmatched→matched; False if another commit won."""
+        result = await self.session.execute(
             update(BankTransaction)
-            .where(BankTransaction.id == txn_id)
+            .where(
+                BankTransaction.id == txn_id, BankTransaction.match_status == "unmatched"
+            )
             .values(match_status="matched")
         )
+        return bool(result.rowcount)
 
     # ---- categorization -----------------------------------------------------
     async def chart_accounts(self, tenant_id: str) -> list[ChartAccount]:
@@ -174,10 +178,20 @@ class BooksRepo:
             select(Invoice).where(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id)
         )
 
-    async def set_invoice_paid(self, invoice_id: str) -> None:
+    async def revert_invoice_open(self, invoice_id: str) -> None:
+        """Undo a staged open→paid flip when the paired txn guard loses the race."""
         await self.session.execute(
-            update(Invoice).where(Invoice.id == invoice_id).values(status="paid")
+            update(Invoice).where(Invoice.id == invoice_id).values(status="open")
         )
+
+    async def set_invoice_paid(self, invoice_id: str) -> bool:
+        """Guarded transition open→paid; False if another commit won the race."""
+        result = await self.session.execute(
+            update(Invoice)
+            .where(Invoice.id == invoice_id, Invoice.status == "open")
+            .values(status="paid")
+        )
+        return bool(result.rowcount)
 
     # ---- matches / ledger ----------------------------------------------------
     async def add_match(self, match: Match) -> None:

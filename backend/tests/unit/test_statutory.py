@@ -71,3 +71,24 @@ def test_clock_snapshot_shape():
     assert snap["escalation_level"] == "reminder"
     assert snap["annual_rate_bps"] == 2025
     assert snap["statutory_due_date"].startswith("2026-04-15")
+
+
+def test_day_count_clamps_to_window():
+    early = clock_snapshot(
+        acceptance_date=ACCEPT,
+        amount_paise=10_000_000,
+        now=datetime(2026, 3, 11, tzinfo=UTC),  # 10 days in
+    )
+    assert early["day_count"] == 10
+    late = clock_snapshot(
+        acceptance_date=ACCEPT,
+        amount_paise=10_000_000,
+        now=datetime(2026, 6, 1, tzinfo=UTC),  # way past the window
+    )
+    assert late["day_count"] == 45
+    future = clock_snapshot(
+        acceptance_date=ACCEPT,
+        amount_paise=10_000_000,
+        now=datetime(2026, 2, 25, tzinfo=UTC),  # acceptance recorded ahead
+    )
+    assert future["day_count"] == 0

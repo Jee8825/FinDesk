@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from typing import Any
 
@@ -99,38 +100,66 @@ async def get_run(run_id: str, auth: Auth) -> RunOut:
 
 @router.get("/agent/runs/{run_id}/stream")
 async def stream_run(run_id: str, auth: Auth) -> StreamingResponse:
+    # tenancy check before anything is streamed
     async with session_scope() as session:
-        repo = RunRepo(session)
-        run = await repo.by_id(run_id, auth.tenant_id)
+        run = await RunRepo(session).by_id(run_id, auth.tenant_id)
         if run is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "run not found")
-        steps = await repo.steps(run_id)
-        terminal = run.status in {"succeeded", "failed", "cancelled"}
-        replay = [
-            {"event": "run.step@v1", "step_id": s.step_id, "name": s.name, "status": s.status}
-            for s in steps
-        ]
-        if terminal:
-            replay.append({"event": "run.done@v1", "status": run.status})
 
     async def gen():
-        for item in replay:
-            yield f"data: {json.dumps(item)}\n\n"
-        if terminal:
-            return
-        live = subscribe_run(run_id)
+        # Order matters: a relay task subscribes to the live channel FIRST,
+        # then we read the persisted replay — any event landing in between is
+        # buffered in the queue and deduped below, so nothing is lost (the old
+        # replay-then-subscribe order dropped events emitted in the gap, and
+        # wait_for(anext()) could cancel the generator mid-step).
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        async def relay() -> None:
+            async for data in subscribe_run(run_id):
+                await queue.put(data)
+
+        relay_task = asyncio.create_task(relay())
+        seen: set[tuple[str, str]] = set()
+
+        def key(item: dict) -> tuple[str, str]:
+            return (item.get("step_id", item.get("event", "")), item.get("status", ""))
+
         try:
+            async with session_scope() as session:
+                repo = RunRepo(session)
+                run_row = await repo.by_id(run_id, auth.tenant_id)
+                steps = await repo.steps(run_id)
+            terminal = run_row.status in {"succeeded", "failed", "cancelled"}
+            for s in steps:
+                item = {
+                    "event": "run.step@v1",
+                    "step_id": s.step_id,
+                    "name": s.name,
+                    "status": s.status,
+                }
+                seen.add(key(item))
+                yield f"data: {json.dumps(item)}\n\n"
+            if terminal:
+                yield f"data: {json.dumps({'event': 'run.done@v1', 'status': run_row.status})}\n\n"
+                return
+
             while True:
                 try:
-                    data = await asyncio.wait_for(anext(live), timeout=15)
+                    data = await asyncio.wait_for(queue.get(), timeout=15)
                 except TimeoutError:
                     yield ": keepalive\n\n"
                     continue
+                item = json.loads(data)
+                if item.get("event", "").startswith("run.step@") and key(item) in seen:
+                    continue  # already sent during replay
+                seen.add(key(item))
                 yield f"data: {data}\n\n"
-                if json.loads(data).get("event", "").startswith("run.done@"):
+                if item.get("event", "").startswith("run.done@"):
                     return
         finally:
-            await live.aclose()
+            relay_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await relay_task
 
     return StreamingResponse(
         gen(),

@@ -41,17 +41,21 @@ async def fetch(state: WorkingCapitalState) -> dict:
 async def recall_behavior(state: WorkingCapitalState) -> dict:
     step_id = uuid7()
     await state.emitter.step("recall_behavior", "started", step_id)
+    client_ids = sorted({inv["client_id"] for inv in state.open_invoices})
+    recalled = await state.memory.recall_many(
+        tenant_id=state.tenant_id,
+        queries=[
+            (f"client:{cid}", "payment behavior: how late does this client pay?")
+            for cid in client_ids
+        ],
+    )
     avg_late: dict[str, float] = {}
-    for client_id in {inv["client_id"] for inv in state.open_invoices}:
-        memories = await state.memory.recall(
-            tenant_id=state.tenant_id,
-            scope_key=f"client:{client_id}",
-            query="payment behavior: how late does this client pay?",
-            token_budget=400,
+    for cid in client_ids:
+        lates = parse_late_days(
+            [m.get("content", "") for m in recalled.get(f"client:{cid}", [])]
         )
-        lates = parse_late_days([m.get("content", "") for m in memories])
         if lates:
-            avg_late[client_id] = round(sum(lates) / len(lates), 1)
+            avg_late[cid] = round(sum(lates) / len(lates), 1)
     await state.emitter.step(
         "recall_behavior", "finished", step_id, clients_with_history=len(avg_late)
     )

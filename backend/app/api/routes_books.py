@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+import anyio
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from findesk_shared import uuid7, vendor_scope
 from pydantic import BaseModel
@@ -74,10 +75,17 @@ async def import_statement(file: UploadFile, auth: Auth) -> ImportOut:
     settings = get_settings()
     doc_id = uuid7()
     digest = hashlib.sha256(content).hexdigest()
-    upload_dir = Path(settings.upload_dir) / auth.tenant_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_dir = anyio.Path(settings.upload_dir) / auth.tenant_id
     storage_path = upload_dir / f"{doc_id}-{Path(file.filename or 'statement.csv').name}"
-    storage_path.write_bytes(content)
+    # write bytes BEFORE the DB transaction (the worker reads this path the
+    # moment the job lands) and non-blockingly; on failure → clean 507
+    try:
+        await upload_dir.mkdir(parents=True, exist_ok=True)
+        await storage_path.write_bytes(content)
+    except OSError as exc:
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE, f"could not store upload: {exc}"
+        ) from exc
 
     run = AgentRun(
         tenant_id=auth.tenant_id,
@@ -317,6 +325,9 @@ async def correct_category(txn_id: str, body: CategoryPatch, auth: Auth) -> dict
         ),
     )
     return {"ok": True, "category_code": body.category_code}
+
+
+@router.get("/books/exceptions", response_model=TxnPage)
 async def list_exceptions(auth: Auth) -> TxnPage:
     async with session_scope() as session:
         repo = BooksRepo(session)

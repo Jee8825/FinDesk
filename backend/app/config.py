@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     app_redis_url: str = "redis://localhost:6380/0"
     recall_base_url: str = "http://localhost:8000"
 
-    jwt_secret: str = "dev-only-secret"
+    app_env: str = "dev"  # dev | staging | prod
+    # 32+ chars even in dev (HS256 minimum); MUST be overridden outside dev
+    jwt_secret: str = "dev-only-secret-not-for-production!!"
     internal_api_token: str = "dev-internal-token"  # worker ↔ backend internal API
     upload_dir: str = "var/uploads"  # dev only; object storage in staging/prod
     outbox_dir: str = "var/outbox"  # sandbox email delivery (dev/staging)
@@ -33,3 +35,17 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def assert_safe_settings() -> None:
+    """Refuse to boot non-dev environments on dev credentials (fail-fast)."""
+    s = get_settings()
+    if s.app_env == "dev":
+        return
+    problems = []
+    if "dev-only" in s.jwt_secret or len(s.jwt_secret) < 32:
+        problems.append("JWT_SECRET is a dev default or shorter than 32 chars")
+    if "dev-internal" in s.internal_api_token or len(s.internal_api_token) < 32:
+        problems.append("INTERNAL_API_TOKEN is a dev default or shorter than 32 chars")
+    if problems:
+        raise RuntimeError(f"unsafe settings for APP_ENV={s.app_env}: " + "; ".join(problems))

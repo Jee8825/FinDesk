@@ -9,6 +9,8 @@ winner with a human-confirmed restatement, and audits the decision.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from findesk_shared import uuid7, vendor_scope
@@ -24,6 +26,11 @@ from app.services.audit import write_audit
 # loser), so only flagged conflicts can become two-sided human cards.
 SURFACED_RESOLUTIONS = {"flagged"}
 
+# lazy-sync throttle: a busy dashboard polls /conflicts often — pulling the
+# engine's log more than once per window per tenant is wasted fan-out
+SYNC_WINDOW_SECONDS = 30.0
+_last_sync: dict[str, float] = {}
+
 
 def _claim_kind(content_a: str, content_b: str) -> str:
     text = f"{content_a} {content_b}".lower()
@@ -36,8 +43,13 @@ def _claim_kind(content_a: str, content_b: str) -> str:
     return "belief"
 
 
-async def sync_conflicts(session: AsyncSession, tenant_id: str) -> int:
+async def sync_conflicts(session: AsyncSession, tenant_id: str, *, force: bool = False) -> int:
     """Pull new engine conflicts into cards. Returns how many were created."""
+    now = time.monotonic()
+    if not force and now - _last_sync.get(tenant_id, 0.0) < SYNC_WINDOW_SECONDS:
+        return 0
+    _last_sync[tenant_id] = now
+
     repo = BooksRepo(session)
     known = {
         row.memory_conflict_id
@@ -53,11 +65,19 @@ async def sync_conflicts(session: AsyncSession, tenant_id: str) -> int:
         label = txn.counterparty_hint or txn.narration[:40]
         scopes[vendor_scope(txn.counterparty_hint, txn.narration)] = label
 
-    created = 0
-    for scope_key, scope_label in scopes.items():
-        engine_conflicts = await memoryclient.list_conflicts(
-            tenant_id=tenant_id, scope_key=scope_key
+    # all engine-log reads run concurrently (semaphore-bounded in memoryclient)
+    scope_items = list(scopes.items())
+    conflict_lists = await asyncio.gather(
+        *(
+            memoryclient.list_conflicts(tenant_id=tenant_id, scope_key=scope_key)
+            for scope_key, _ in scope_items
         )
+    )
+
+    created = 0
+    for (scope_key, scope_label), engine_conflicts in zip(
+        scope_items, conflict_lists, strict=True
+    ):
         for c in engine_conflicts:
             cid = str(c["id"])
             if cid in known or c.get("resolution") not in SURFACED_RESOLUTIONS:

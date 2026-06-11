@@ -67,18 +67,25 @@ async def match(state: ReconState) -> dict:
     # recall-before-reason: remembered deduction patterns drive TDS matching
     notes: list[str] = []
     remembered_rates: dict[str, list[int]] = {}
-    open_party_ids = {inv["counterparty_id"] for inv in context["open_invoices"]}
     parties_by_id = {p["id"]: p for p in context["counterparties"]}
+    open_party_ids = sorted(
+        pid
+        for pid in {inv["counterparty_id"] for inv in context["open_invoices"]}
+        if pid in parties_by_id
+    )
+    recalled = await state.memory.recall_many(
+        tenant_id=state.tenant_id,
+        queries=[
+            (
+                f"client:{pid}",
+                f"TDS deduction and payment behavior of {parties_by_id[pid]['name']}",
+            )
+            for pid in open_party_ids
+        ],
+    )
     for party_id in open_party_ids:
-        party = parties_by_id.get(party_id)
-        if party is None:
-            continue
-        memories = await state.memory.recall(
-            tenant_id=state.tenant_id,
-            scope_key=f"client:{party_id}",
-            query=f"TDS deduction and payment behavior of {party['name']}",
-            token_budget=400,
-        )
+        party = parties_by_id[party_id]
+        memories = recalled.get(f"client:{party_id}", [])
         if memories:
             notes.append(f"{party['name']}: {len(memories)} memories")
             rates = matching.parse_deduction_rates([m.get("content", "") for m in memories])
@@ -118,18 +125,14 @@ async def categorize(state: ReconState) -> dict:
     debits = state.context.get("uncategorized_debits", [])
     valid_codes = set(state.context.get("valid_category_codes", []))
 
+    slugs = sorted({categorization.vendor_slug(txn) for txn in debits})
+    recalled = await state.memory.recall_many(
+        tenant_id=state.tenant_id,
+        queries=[(f"vendor:{slug}", "expense category of this vendor") for slug in slugs],
+    )
     memory_claims: dict[str, tuple[str, float]] = {}
-    for txn in debits:
-        slug = categorization.vendor_slug(txn)
-        if slug in memory_claims:
-            continue
-        memories = await state.memory.recall(
-            tenant_id=state.tenant_id,
-            scope_key=f"vendor:{slug}",
-            query="expense category of this vendor",
-            token_budget=400,
-        )
-        claim = categorization.parse_category_claims(memories)
+    for slug in slugs:
+        claim = categorization.parse_category_claims(recalled.get(f"vendor:{slug}", []))
         if claim:
             memory_claims[slug] = claim
 
