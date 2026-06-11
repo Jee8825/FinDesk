@@ -324,6 +324,28 @@ export const api = {
       apiPaths.PATCH_BOOKS_TRANSACTIONS_TXN_ID_CATEGORY.replace("{txn_id}", txnId),
       { category_code: code },
     ),
+  onboardInvoices: async (
+    file: File,
+  ): Promise<{
+    source_hint: string;
+    counterparties_created: number;
+    invoices_created: number;
+    invoices_skipped: number;
+    observations_seeded: number;
+  }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_ONBOARDING}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.detail ?? `import failed (${res.status})`);
+    }
+    return res.json();
+  },
   importStatement: async (file: File): Promise<{ document_id: string; run_id: string }> => {
     const form = new FormData();
     form.append("file", file);

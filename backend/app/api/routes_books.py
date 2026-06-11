@@ -116,6 +116,131 @@ async def import_statement(file: UploadFile, auth: Auth) -> ImportOut:
     return ImportOut(document_id=doc_id, run_id=run.id)
 
 
+class OnboardingOut(BaseModel):
+    source_hint: str
+    counterparties_created: int
+    invoices_created: int
+    invoices_skipped: int
+    observations_seeded: int
+
+
+@router.post(
+    "/books/onboarding", status_code=status.HTTP_201_CREATED, response_model=OnboardingOut
+)
+async def onboard_invoices(file: UploadFile, auth: Auth) -> OnboardingOut:
+    """A1 onboarding: import a Tally/Zoho invoice export.
+
+    Creates counterparties + invoices (idempotent by name/number) and seeds
+    paid history into memory as payment_behavior observations — so matching,
+    chasing and forecasting are intelligent from day one.
+    """
+    if auth.role == "viewer":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "viewers cannot import")
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large")
+    from findesk_tools.bank_statements.schemas import ToolError
+    from findesk_tools.ledger_import import parse_invoice_export
+
+    try:
+        result = parse_invoice_export(content.decode(errors="replace"))
+    except ToolError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.reason) from exc
+
+    from findesk_shared import format_inr
+    from sqlalchemy import select
+
+    from app import memoryclient
+    from app.db.models import Counterparty, Invoice
+
+    parties_created = 0
+    created = 0
+    skipped = 0
+    observations: list[tuple[str, str]] = []  # (scope_key, content)
+
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        parties = {c.name.lower(): c for c in await repo.counterparties(auth.tenant_id)}
+        existing_numbers = {
+            i.number
+            for i in await session.scalars(
+                select(Invoice).where(Invoice.tenant_id == auth.tenant_id)
+            )
+        }
+        for inv in result.invoices:
+            party = parties.get(inv.client_name.lower())
+            if party is None:
+                party = Counterparty(
+                    id=uuid7(),
+                    tenant_id=auth.tenant_id,
+                    kind="client",
+                    name=inv.client_name,
+                    contacts={},
+                )
+                session.add(party)
+                parties[inv.client_name.lower()] = party
+                parties_created += 1
+            if inv.number in existing_numbers:
+                skipped += 1
+                continue
+            session.add(
+                Invoice(
+                    id=uuid7(),
+                    tenant_id=auth.tenant_id,
+                    counterparty_id=party.id,
+                    number=inv.number,
+                    issue_date=inv.issue_date,
+                    due_date=inv.due_date,
+                    acceptance_date=inv.issue_date,
+                    amount_paise=inv.amount_paise,
+                    status=inv.status,
+                )
+            )
+            existing_numbers.add(inv.number)
+            created += 1
+            if inv.status == "paid" and inv.paid_date is not None:
+                delta = (inv.paid_date.date() - inv.due_date.date()).days
+                timing = f"{delta} days late" if delta > 0 else f"{-delta} days early"
+                observations.append(
+                    (
+                        f"client:{party.id}",
+                        f"Invoice {inv.number} ({format_inr(inv.amount_paise)}) was paid "
+                        f"{timing} relative to its due date {inv.due_date.date().isoformat()}.",
+                    )
+                )
+        await write_audit(
+            session,
+            tenant_id=auth.tenant_id,
+            actor={"kind": "user", "id": auth.user_id},
+            action="books.onboarded",
+            entity_ref=f"tenant:{auth.tenant_id}",
+            payload={
+                "source_hint": result.source_hint,
+                "filename": file.filename,
+                "invoices_created": created,
+                "counterparties_created": parties_created,
+            },
+        )
+
+    seeded = 0
+    for scope_key, text in observations:
+        ok = await memoryclient.remember(
+            tenant_id=auth.tenant_id,
+            scope_key=scope_key,
+            session_id="seed:onboarding",
+            content=text,
+        )
+        seeded += 1 if ok else 0
+
+    return OnboardingOut(
+        source_hint=result.source_hint,
+        counterparties_created=parties_created,
+        invoices_created=created,
+        invoices_skipped=skipped,
+        observations_seeded=seeded,
+    )
+
+
 @router.get("/books/transactions", response_model=TxnPage)
 async def list_transactions(
     auth: Auth, status_filter: str | None = None, cursor: str | None = None, limit: int = 50
