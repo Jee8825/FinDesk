@@ -26,6 +26,7 @@ KNOWN_GRAPHS = {
     "collections",
     "cash_forecast",
     "working_capital",
+    "enforcer_45day",
 }
 
 

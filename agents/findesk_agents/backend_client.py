@@ -42,6 +42,33 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def enforcer_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get(
+            "/internal/enforcer/context", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def queue_act_letter(
+        self, tenant_id: str, run_id: str, letter: dict[str, Any]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/enforcer/act-letter",
+            json={"tenant_id": tenant_id, "run_id": run_id, "letter": letter},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def persist_samadhaan_prep(
+        self, tenant_id: str, run_id: str, doc: dict[str, Any]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/enforcer/samadhaan-prep",
+            json={"tenant_id": tenant_id, "run_id": run_id, "doc": doc},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def latest_gap(self, tenant_id: str) -> dict[str, Any] | None:
         resp = await self._client.get(
             "/internal/forecast/latest-gap", params={"tenant_id": tenant_id}

@@ -24,6 +24,8 @@ from findesk_agents.graphs.cash_forecast import graph as forecast_graph
 from findesk_agents.graphs.cash_forecast.state import ForecastState
 from findesk_agents.graphs.collections import graph as collections_graph
 from findesk_agents.graphs.collections.state import CollectionsState
+from findesk_agents.graphs.enforcer import graph as enforcer_graph
+from findesk_agents.graphs.enforcer.state import EnforcerState
 from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
@@ -55,6 +57,20 @@ async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
             )
             final = await ping_graph.run(state)
             await emitter.done("succeeded", summary=final.summary)
+        elif event.startswith("job.enforcer_tick.") or event.startswith("job.enforcer_45day."):
+            backend = BackendClient()
+            try:
+                enf_state = EnforcerState(
+                    tenant_id=tenant_id,
+                    run_id=run_id,
+                    emitter=emitter,
+                    backend=backend,
+                    memory=MemoryClient(),
+                )
+                enf_final = await enforcer_graph.run(enf_state)
+                await emitter.done("succeeded", summary=enf_final.summary)
+            finally:
+                await backend.aclose()
         elif event.startswith("job.working_capital."):
             backend = BackendClient()
             try:

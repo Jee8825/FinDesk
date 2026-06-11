@@ -8,20 +8,18 @@ and ship with explicit review-with-your-CA framing.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter
-from findesk_shared import parse_late_days, uuid7
+from findesk_shared import parse_late_days
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from app import memoryclient
 from app.auth.deps import Auth
 from app.db import session_scope
 from app.db.books_repo import BooksRepo
-from app.db.models import StatutoryClock
-from app.services.statutory import clock_snapshot
+from app.services.clocks import recompute_clocks
 
 router = APIRouter(tags=["cash"])
 
@@ -50,43 +48,15 @@ class RadarOut(BaseModel):
 
 @router.get("/receivables/radar", response_model=RadarOut)
 async def radar(auth: Auth) -> RadarOut:
-    now = datetime.now(UTC)
     items: list[RadarItem] = []
     total_overdue = 0
     total_interest = 0
 
     async with session_scope() as session:
         repo = BooksRepo(session)
-        invoices = await repo.open_invoices(auth.tenant_id)
         parties = {c.id: c.name for c in await repo.counterparties(auth.tenant_id)}
-        clocks = {
-            c.invoice_id: c
-            for c in await session.scalars(
-                select(StatutoryClock).where(StatutoryClock.tenant_id == auth.tenant_id)
-            )
-        }
 
-        for inv in invoices:
-            acceptance = inv.acceptance_date or inv.issue_date
-            snap = clock_snapshot(
-                acceptance_date=acceptance, amount_paise=inv.amount_paise, now=now
-            )
-
-            clock = clocks.get(inv.id)
-            if clock is None:
-                clock = StatutoryClock(
-                    id=uuid7(),
-                    tenant_id=auth.tenant_id,
-                    invoice_id=inv.id,
-                    acceptance_date=acceptance,
-                    statutory_due_date=datetime.fromisoformat(snap["statutory_due_date"]),
-                    annual_rate_bps=snap["annual_rate_bps"],
-                )
-                session.add(clock)
-            clock.overdue_days = snap["overdue_days"]
-            clock.accrued_interest_paise = snap["accrued_interest_paise"]
-            clock.escalation_level = snap["escalation_level"]
-
+        for inv, _clock, snap in await recompute_clocks(session, auth.tenant_id):
             memories = await memoryclient.retrieve_units(
                 tenant_id=auth.tenant_id,
                 scope_key=f"client:{inv.counterparty_id}",
