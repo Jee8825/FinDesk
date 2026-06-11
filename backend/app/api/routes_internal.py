@@ -392,6 +392,157 @@ async def persist_forecast(
     return {"forecast_id": forecast.id}
 
 
+LADDER_ORDER = ("none", "nudge", "reminder", "act_letter", "samadhaan_prep")
+ENFORCED_LEVELS = {"act_letter", "samadhaan_prep"}
+
+
+class EnforcerContext(BaseModel):
+    transitions: list[dict[str, Any]]
+    sender_name: str
+    tenant_name: str
+
+
+@router.get("/enforcer/context", response_model=EnforcerContext)
+async def enforcer_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> EnforcerContext:
+    _check_token(x_internal_token)
+    from app.db.repositories import TenantRepo
+    from app.services.clocks import recompute_clocks
+
+    async with session_scope() as session:
+        repo = BooksRepo(session)
+        parties = {c.id: c for c in await repo.counterparties(tenant_id)}
+        tenant = await TenantRepo(session).by_id(tenant_id)
+        transitions = []
+        for inv, clock, snap in await recompute_clocks(session, tenant_id):
+            level = snap["escalation_level"]
+            if level not in ENFORCED_LEVELS:
+                continue
+            if LADDER_ORDER.index(level) <= LADDER_ORDER.index(clock.last_enforced_level):
+                continue  # already acted on this rung (or higher) — no re-fire
+            client = parties.get(inv.counterparty_id)
+            transitions.append(
+                {
+                    "invoice": {
+                        "id": inv.id,
+                        "number": inv.number,
+                        "amount_paise": inv.amount_paise,
+                    },
+                    "client": {
+                        "id": inv.counterparty_id,
+                        "name": client.name if client else "?",
+                        "emails": (client.contacts or {}).get("emails", []) if client else [],
+                    },
+                    "clock": snap,
+                }
+            )
+    tenant_name = tenant.name if tenant else "the supplier"
+    return EnforcerContext(
+        transitions=transitions,
+        sender_name=f"Accounts, {tenant_name}",
+        tenant_name=tenant_name,
+    )
+
+
+class ActLetterQueue(BaseModel):
+    tenant_id: str
+    run_id: str
+    letter: dict[str, Any]
+
+
+@router.post("/enforcer/act-letter")
+async def queue_act_letter(
+    body: ActLetterQueue, x_internal_token: str | None = Header(None)
+) -> dict[str, Any]:
+    _check_token(x_internal_token)
+    from sqlalchemy import select
+
+    from app.db.models import StatutoryClock
+    from app.services.approvals import queue_approval
+
+    letter = body.letter
+    async with session_scope() as session:
+        approval = await queue_approval(
+            session,
+            tenant_id=body.tenant_id,
+            action_kind="send_email",
+            action_payload=letter,
+            requested_by={"kind": "agent", "run_id": body.run_id},
+            policy_verdicts={
+                "rule": "statutory escalation letters are always human-gated (P2/P6)",
+                "ladder_rung": letter.get("level"),
+                "days_overdue": letter.get("days_overdue"),
+            },
+        )
+        clock = await session.scalar(
+            select(StatutoryClock).where(
+                StatutoryClock.tenant_id == body.tenant_id,
+                StatutoryClock.invoice_id == letter["invoice_id"],
+            )
+        )
+        if clock is not None:
+            clock.last_enforced_level = letter.get("level", "act_letter")
+    return {"queued": True, "approval_id": approval.id}
+
+
+class SamadhaanPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    doc: dict[str, Any]
+
+
+@router.post("/enforcer/samadhaan-prep")
+async def persist_samadhaan(
+    body: SamadhaanPersist, x_internal_token: str | None = Header(None)
+) -> dict[str, Any]:
+    _check_token(x_internal_token)
+    from pathlib import Path
+
+    from findesk_shared import uuid7
+    from sqlalchemy import select
+
+    from app.config import get_settings
+    from app.db.models import Document, StatutoryClock
+    from app.services.audit import write_audit
+
+    doc = body.doc
+    doc_id = uuid7()
+    folder = Path(get_settings().upload_dir) / body.tenant_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{doc_id}-samadhaan-{doc['invoice_number']}.md"
+    path.write_text(doc["body_md"], encoding="utf-8")
+    async with session_scope() as session:
+        session.add(
+            Document(
+                id=doc_id,
+                tenant_id=body.tenant_id,
+                kind="samadhaan_prep",
+                filename=path.name,
+                content_hash="",
+                storage_path=str(path),
+                meta={"invoice_id": doc["invoice_id"], "title": doc["title"]},
+            )
+        )
+        await write_audit(
+            session,
+            tenant_id=body.tenant_id,
+            actor={"kind": "agent", "run_id": body.run_id},
+            action="samadhaan.prepared",
+            entity_ref=f"invoice:{doc['invoice_id']}",
+            payload={"document_id": doc_id, "title": doc["title"]},
+        )
+        clock = await session.scalar(
+            select(StatutoryClock).where(
+                StatutoryClock.tenant_id == body.tenant_id,
+                StatutoryClock.invoice_id == doc["invoice_id"],
+            )
+        )
+        if clock is not None:
+            clock.last_enforced_level = "samadhaan_prep"
+    return {"document_id": doc_id}
+
+
 @router.get("/forecast/latest-gap")
 async def latest_gap(tenant_id: str, x_internal_token: str | None = Header(None)) -> dict[str, Any]:
     _check_token(x_internal_token)

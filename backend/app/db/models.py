@@ -253,6 +253,8 @@ class StatutoryClock(TimestampedTenanted, Base):
     accrued_interest_paise: Mapped[int] = mapped_column(BigInteger, default=0)
     annual_rate_bps: Mapped[int] = mapped_column(Integer)
     escalation_level: Mapped[str] = mapped_column(String(20), default="none", index=True)
+    # highest rung an enforcement artifact has been prepared for (no re-fires)
+    last_enforced_level: Mapped[str] = mapped_column(String(20), default="none")
 
 
 class Anomaly(TimestampedTenanted, Base):
