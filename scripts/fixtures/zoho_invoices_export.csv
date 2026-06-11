@@ -1,0 +1,7 @@
+Invoice Number,Invoice Date,Due Date,Customer Name,Total,Balance,Invoice Status,Payment Date
+PHX-2026-001,2026-01-10,2026-02-09,Phoenix Decor LLP,"1,18,000.00",0.00,Paid,2026-02-21
+PHX-2026-002,2026-02-05,2026-03-07,Phoenix Decor LLP,"59,000.00",0.00,Paid,2026-03-19
+PHX-2026-003,2026-03-02,2026-04-01,Phoenix Decor LLP,"82,600.00",0.00,Paid,2026-04-12
+PHX-2026-004,2026-05-20,2026-06-19,Phoenix Decor LLP,"2,36,000.00","2,36,000.00",Sent,
+MGE-2026-011,2026-03-01,2026-03-31,Marigold Events,"45,000.00",0.00,Paid,2026-03-28
+MGE-2026-012,2026-05-25,2026-06-24,Marigold Events,"67,500.00","67,500.00",Sent,

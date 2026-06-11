@@ -55,9 +55,11 @@ function CategoryCell({
 export default function BooksPage() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
+  const onboardInput = useRef<HTMLInputElement>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [onboardNote, setOnboardNote] = useState<string | null>(null);
   const { events, done } = useRunStream(runId);
 
   const txns = useQuery({
@@ -70,6 +72,24 @@ export default function BooksPage() {
     queryFn: () => api.chartOfAccounts(),
     staleTime: 60_000,
   });
+
+  async function onboard(file: File) {
+    setError(null);
+    setOnboardNote(null);
+    try {
+      const r = await api.onboardInvoices(file);
+      setOnboardNote(
+        `Imported ${r.invoices_created} invoices (${r.source_hint}), ` +
+          `${r.counterparties_created} new clients, ` +
+          `${r.observations_seeded} payment behaviors remembered.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "import failed");
+    } finally {
+      if (onboardInput.current) onboardInput.current.value = "";
+    }
+  }
 
   async function upload(file: File) {
     setError(null);
@@ -97,7 +117,21 @@ export default function BooksPage() {
             Rules-only in Phase 1 — anything ambiguous stays for review.
           </p>
         </div>
-        <div>
+        <div className="flex gap-2">
+          <input
+            ref={onboardInput}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && onboard(e.target.files[0])}
+          />
+          <button
+            onClick={() => onboardInput.current?.click()}
+            className="rounded-md border border-teal-brand px-4 py-2 text-sm font-medium text-teal-brand"
+            title="Tally/Zoho invoice export — seeds payment history into memory"
+          >
+            Import invoices
+          </button>
           <input
             ref={fileInput}
             type="file"
@@ -116,6 +150,11 @@ export default function BooksPage() {
       </div>
 
       {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
+      {onboardNote && (
+        <p className="mt-4 rounded-lg bg-teal-brand/10 px-4 py-2 text-sm text-teal-brand">
+          {onboardNote}
+        </p>
+      )}
 
       {runId && (
         <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">

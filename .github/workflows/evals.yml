@@ -1,4 +1,4 @@
-name: evals
+name: nightly
 
 on:
   schedule:
@@ -8,6 +8,7 @@ on:
     paths:
       - "agents/findesk_agents/graphs/reconciliation/**"
       - "infra/observability/evals/**"
+      - "backend/tests/integration/**"
 
 jobs:
   recon-eval:
@@ -24,3 +25,14 @@ jobs:
         with:
           name: recon-eval-report
           path: infra/observability/evals/evals_out/recon_eval.json
+
+  integration:
+    # real Postgres via testcontainers: guardrails, tenancy, audit-chain tamper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install ./shared/py ./tools -e './backend[dev]'
+      - name: Integration suite
+        run: cd backend && python -m pytest tests/integration -q -m integration

@@ -48,6 +48,11 @@ paths:
     get: { tags: [books], summary: Normalized bank feed (cursor paginated), responses: { "200": { description: page } } }
   /books/imports:
     post: { tags: [books], summary: Upload statement/export file → 202 + run_id, responses: { "202": { description: queued } } }
+  /books/onboarding:
+    post:
+      tags: [books]
+      summary: A1 onboarding — import Tally/Zoho invoice export; seeds payment history into memory
+      responses: { "201": { description: import summary } }
   /books/exceptions:
     get: { tags: [books], summary: Unmatched residuals queue, responses: { "200": { description: page } } }
   /books/chart-of-accounts:
