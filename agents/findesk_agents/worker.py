@@ -1,7 +1,9 @@
 """Stream worker: consume job events, run graphs, emit run events.
 
 Stateless and horizontally scalable — add replicas to scale throughput.
-At-least-once delivery; graphs are idempotent per step_id.
+At-least-once delivery; graphs are idempotent per step_id. One shared
+BackendClient/MemoryClient per process (pooled connections, closed on
+shutdown) — graphs receive them via state.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import contextlib
 import json
 import logging
 import signal
+from typing import Any
 
 import redis.asyncio as aioredis
 from findesk_shared import uuid7
@@ -36,118 +39,71 @@ from findesk_agents.memoryclient import MemoryClient
 
 log = logging.getLogger("findesk.worker")
 
+# job-event prefix → (graph module, state factory). ReconState additionally
+# reads document_id ("" = sweep run); ping takes no clients.
+GRAPHS = {
+    "job.ping.": (
+        ping_graph,
+        lambda common, payload: PingState(**common, params=payload.get("params", {})),
+    ),
+    "job.reconciliation.": (
+        recon_graph,
+        lambda common, payload: ReconState(
+            **common, document_id=payload.get("document_id") or ""
+        ),
+    ),
+    "job.anomaly_scan.": (anomaly_graph, lambda common, payload: AnomalyState(**common)),
+    "job.collections.": (collections_graph, lambda common, payload: CollectionsState(**common)),
+    "job.forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
+    "job.cash_forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
+    "job.working_capital.": (wc_graph, lambda common, payload: WorkingCapitalState(**common)),
+    "job.enforcer_tick.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
+    "job.enforcer_45day.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
+}
 
-async def dispatch(redis: aioredis.Redis, msg: dict[str, str]) -> None:
+
+def _resolve(event: str):
+    for prefix, entry in GRAPHS.items():
+        if event.startswith(prefix):
+            return entry
+    return None
+
+
+async def dispatch(
+    redis: aioredis.Redis,
+    msg: dict[str, str],
+    backend: BackendClient,
+    memory: MemoryClient,
+) -> None:
     event = msg.get("event", "")
     run_id = msg.get("run_id", "")
     tenant_id = msg.get("tenant_id", "")
-    payload = json.loads(msg.get("payload") or "{}")
+    try:
+        payload: dict[str, Any] = json.loads(msg.get("payload") or "{}")
+    except json.JSONDecodeError:
+        payload = {}
     if not run_id or not tenant_id:
         log.warning("malformed job event dropped: %s", event)
         return
 
     emitter = RedisEventEmitter(redis, tenant_id=tenant_id, run_id=run_id)
+    entry = _resolve(event)
+    if entry is None:
+        log.warning("no graph for event %s", event)
+        await emitter.done("failed", summary=f"unknown job kind {event}")
+        return
+
+    graph, make_state = entry
+    common: dict[str, Any] = {"tenant_id": tenant_id, "run_id": run_id, "emitter": emitter}
+    if graph is not ping_graph:
+        common |= {"backend": backend, "memory": memory}
     try:
-        if event.startswith("job.ping."):
-            state = PingState(
-                tenant_id=tenant_id,
-                run_id=run_id,
-                params=payload.get("params", {}),
-                emitter=emitter,
-            )
-            final = await ping_graph.run(state)
-            await emitter.done("succeeded", summary=final.summary)
-        elif event.startswith("job.enforcer_tick.") or event.startswith("job.enforcer_45day."):
-            backend = BackendClient()
-            try:
-                enf_state = EnforcerState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                enf_final = await enforcer_graph.run(enf_state)
-                await emitter.done("succeeded", summary=enf_final.summary)
-            finally:
-                await backend.aclose()
-        elif event.startswith("job.working_capital."):
-            backend = BackendClient()
-            try:
-                wc_state = WorkingCapitalState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                wc_final = await wc_graph.run(wc_state)
-                await emitter.done("succeeded", summary=wc_final.summary)
-            finally:
-                await backend.aclose()
-        elif event.startswith("job.forecast.") or event.startswith("job.cash_forecast."):
-            backend = BackendClient()
-            try:
-                fc_state = ForecastState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                fc_final = await forecast_graph.run(fc_state)
-                await emitter.done("succeeded", summary=fc_final.summary)
-            finally:
-                await backend.aclose()
-        elif event.startswith("job.collections."):
-            backend = BackendClient()
-            try:
-                coll_state = CollectionsState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                coll_final = await collections_graph.run(coll_state)
-                await emitter.done("succeeded", summary=coll_final.summary)
-            finally:
-                await backend.aclose()
-        elif event.startswith("job.anomaly_scan."):
-            backend = BackendClient()
-            try:
-                anomaly_state = AnomalyState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                anomaly_final = await anomaly_graph.run(anomaly_state)
-                await emitter.done("succeeded", summary=anomaly_final.summary)
-            finally:
-                await backend.aclose()
-        elif event.startswith("job.reconciliation."):
-            backend = BackendClient()
-            try:
-                recon_state = ReconState(
-                    tenant_id=tenant_id,
-                    run_id=run_id,
-                    document_id=payload.get("document_id") or "",  # empty = sweep run
-                    emitter=emitter,
-                    backend=backend,
-                    memory=MemoryClient(),
-                )
-                recon_final = await recon_graph.run(recon_state)
-                await emitter.done("succeeded", summary=recon_final.summary)
-            finally:
-                await backend.aclose()
-        else:
-            log.warning("no graph for event %s", event)
-            await emitter.done("failed", summary=f"unknown job kind {event}")
+        final = await graph.run(make_state(common, payload))
+        await emitter.done("succeeded", summary=final.summary)
     except Exception as exc:  # noqa: BLE001 — a run failure must not kill the worker
         log.exception("run %s failed", run_id)
-        await emitter.done("failed", summary=str(exc))
+        # clean, bounded summary for the UI — full traceback stays in logs
+        await emitter.done("failed", summary=f"{type(exc).__name__}: {str(exc)[:200]}")
 
 
 async def main() -> None:
@@ -164,6 +120,8 @@ async def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
+    backend = BackendClient()
+    memory = MemoryClient()
     consumer = f"worker-{uuid7()[:8]}"
     log.info("worker %s consuming %s", consumer, settings.jobs_stream_interactive)
     while not stop.is_set():
@@ -177,7 +135,7 @@ async def main() -> None:
             )
             for _stream, entries in batches or []:
                 for entry_id, msg in entries:
-                    await dispatch(redis, msg)
+                    await dispatch(redis, msg, backend, memory)
                     await redis.xack(
                         settings.jobs_stream_interactive, settings.jobs_consumer_group, entry_id
                     )
@@ -187,6 +145,8 @@ async def main() -> None:
             log.exception("worker loop error; retrying")
             await asyncio.sleep(1)
 
+    await backend.aclose()
+    await memory.aclose()
     await redis.aclose()
 
 

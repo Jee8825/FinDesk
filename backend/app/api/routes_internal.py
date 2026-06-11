@@ -7,6 +7,7 @@ tenant_id from the job envelope, and rows are filtered server-side regardless.
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from typing import Any
 
@@ -23,7 +24,8 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 
 def _check_token(token: str | None) -> None:
-    if token != get_settings().internal_api_token:
+    expected = get_settings().internal_api_token
+    if token is None or not secrets.compare_digest(token, expected):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad internal token")
 
 
@@ -57,6 +59,7 @@ class TxnIngest(BaseModel):
 class TxnIngestOut(BaseModel):
     inserted: int
     skipped: int
+    rejected: int = 0  # malformed rows dropped (never a 500)
 
 
 @router.post("/recon/transactions", response_model=TxnIngestOut)
@@ -75,7 +78,6 @@ async def ingest_transactions(
         # that are not persisted columns
         columns = (
             "external_ref",
-            "value_date",
             "amount_paise",
             "direction",
             "narration",
@@ -83,18 +85,35 @@ async def ingest_transactions(
             "dedupe_hash",
             "source",
         )
-        rows = [
-            {
-                "id": uuid7(),
-                "tenant_id": body.tenant_id,
-                "bank_account_id": account.id,
-                **{k: row[k] for k in columns if k in row},
-                "value_date": datetime.fromisoformat(row["value_date"]),
-            }
-            for row in body.rows
-        ]
+        required = ("value_date", "amount_paise", "direction", "narration", "dedupe_hash")
+        rows = []
+        rejected = 0
+        for row in body.rows:
+            if any(k not in row for k in required):
+                rejected += 1
+                continue
+            try:
+                value_date = datetime.fromisoformat(str(row["value_date"]))
+            except ValueError:
+                rejected += 1
+                continue
+            rows.append(
+                {
+                    "id": uuid7(),
+                    "tenant_id": body.tenant_id,
+                    "bank_account_id": account.id,
+                    **{k: row[k] for k in columns if k in row},
+                    "value_date": value_date,
+                }
+            )
+        if rejected:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "ingest: rejected %d malformed rows for tenant %s", rejected, body.tenant_id
+            )
         inserted, skipped = await repo.insert_transactions_deduped(rows)
-    return TxnIngestOut(inserted=inserted, skipped=skipped)
+    return TxnIngestOut(inserted=inserted, skipped=skipped, rejected=rejected)
 
 
 class ReconContext(BaseModel):
@@ -176,9 +195,10 @@ async def categorize_transactions(
         repo = BooksRepo(session)
         valid = {c.code for c in await repo.chart_accounts(body.tenant_id)}
         for item in body.items:
-            if item.get("category_code") not in valid:
+            txn_id = item.get("bank_transaction_id")
+            if not txn_id or item.get("category_code") not in valid:
                 continue
-            txn = await repo.transaction(item["bank_transaction_id"], body.tenant_id)
+            txn = await repo.transaction(txn_id, body.tenant_id)
             if txn is None:
                 continue
             ok = await repo.set_category(
@@ -259,19 +279,20 @@ async def persist_anomalies(
             )
         }
         for f in body.findings:
-            if f["dedupe_key"] in known:
-                continue
+            dedupe_key = f.get("dedupe_key")
+            if not dedupe_key or dedupe_key in known or not f.get("kind"):
+                continue  # malformed or duplicate — drop, never 500
             session.add(
                 Anomaly(
                     id=uuid7(),
                     tenant_id=body.tenant_id,
                     kind=f["kind"],
-                    severity=f.get("severity", "medium"),
-                    vendor_label=f["vendor_label"][:80],
-                    evidence=f["evidence"],
-                    recommended_action=f["recommended_action"][:300],
+                    severity=f.get("severity") or "medium",
+                    vendor_label=(f.get("vendor_label") or "unknown")[:80],
+                    evidence=f.get("evidence") or {},
+                    recommended_action=(f.get("recommended_action") or "")[:300],
                     recoverable_paise=f.get("recoverable_paise"),
-                    dedupe_key=f["dedupe_key"],
+                    dedupe_key=dedupe_key,
                 )
             )
             created += 1
@@ -497,8 +518,6 @@ async def persist_samadhaan(
     body: SamadhaanPersist, x_internal_token: str | None = Header(None)
 ) -> dict[str, Any]:
     _check_token(x_internal_token)
-    from pathlib import Path
-
     from findesk_shared import uuid7
     from sqlalchemy import select
 
@@ -507,11 +526,20 @@ async def persist_samadhaan(
     from app.services.audit import write_audit
 
     doc = body.doc
+    if not all(k in doc for k in ("invoice_id", "invoice_number", "title", "body_md")):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "incomplete samadhaan doc")
     doc_id = uuid7()
-    folder = Path(get_settings().upload_dir) / body.tenant_id
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = anyio.Path(get_settings().upload_dir) / body.tenant_id
     path = folder / f"{doc_id}-samadhaan-{doc['invoice_number']}.md"
-    path.write_text(doc["body_md"], encoding="utf-8")
+    # non-blocking write BEFORE the transaction: a failed write aborts cleanly
+    # with no DB row; a rolled-back transaction leaves only a harmless file
+    try:
+        await folder.mkdir(parents=True, exist_ok=True)
+        await path.write_text(doc["body_md"], encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE, f"could not store document: {exc}"
+        ) from exc
     async with session_scope() as session:
         session.add(
             Document(

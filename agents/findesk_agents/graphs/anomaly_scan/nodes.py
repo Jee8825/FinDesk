@@ -23,16 +23,15 @@ async def fetch(state: AnomalyState) -> dict:
 async def recall_baselines(state: AnomalyState) -> dict:
     step_id = uuid7()
     await state.emitter.step("recall_baselines", "started", step_id)
+    vendors = sorted({detection.slug(t) for t in state.debits})
+    recalled = await state.memory.recall_many(
+        tenant_id=state.tenant_id,
+        queries=[(f"vendor:{v}", "usual monthly bill amount for this vendor") for v in vendors],
+    )
     baselines: dict[str, list[int]] = {}
-    for vendor in {detection.slug(t) for t in state.debits}:
-        memories = await state.memory.recall(
-            tenant_id=state.tenant_id,
-            scope_key=f"vendor:{vendor}",
-            query="usual monthly bill amount for this vendor",
-            token_budget=400,
-        )
+    for vendor in vendors:
         amounts = []
-        for m in memories:
+        for m in recalled.get(f"vendor:{vendor}", []):
             match = _BASELINE_RE.search(m.get("content", ""))
             if match:
                 amounts.append(int(match.group(1).replace(",", "")) * 100)

@@ -7,6 +7,7 @@ keys, run-id stamping, budgets — is exercised whenever the stack is up).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -18,9 +19,17 @@ log = logging.getLogger("findesk.memory")
 
 
 class MemoryClient:
+    """One pooled AsyncClient per instance (the worker shares one instance)."""
+
     def __init__(self, base_url: str | None = None, *, timeout: float = 5.0) -> None:
-        self._base_url = (base_url or get_settings().recall_base_url).rstrip("/")
-        self._timeout = timeout
+        self._http = httpx.AsyncClient(
+            base_url=(base_url or get_settings().recall_base_url).rstrip("/"),
+            timeout=timeout,
+        )
+        self._semaphore = asyncio.Semaphore(8)  # bound graph fan-outs
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
 
     async def remember(
         self,
@@ -32,8 +41,8 @@ class MemoryClient:
     ) -> bool:
         """Ingest one observation. Returns False (and logs) if memory is unavailable."""
         try:
-            async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout) as client:
-                resp = await client.post(
+            async with self._semaphore:
+                resp = await self._http.post(
                     "/memory/ingest",
                     json={
                         "user_id": scope_key,
@@ -42,8 +51,8 @@ class MemoryClient:
                         "tenant_id": tenant_id,
                     },
                 )
-                resp.raise_for_status()
-                return True
+            resp.raise_for_status()
+            return True
         except (httpx.HTTPError, OSError) as exc:
             log.warning("memory ingest skipped (%s)", exc)
             return False
@@ -58,8 +67,8 @@ class MemoryClient:
     ) -> list[dict[str, Any]]:
         """Budget-packed retrieval. Returns [] if memory is unavailable."""
         try:
-            async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout) as client:
-                resp = await client.post(
+            async with self._semaphore:
+                resp = await self._http.post(
                     "/memory/retrieve",
                     json={
                         "user_id": scope_key,
@@ -68,8 +77,26 @@ class MemoryClient:
                         "tenant_id": tenant_id,
                     },
                 )
-                resp.raise_for_status()
-                return resp.json().get("memories", [])
+            resp.raise_for_status()
+            return resp.json().get("memories", [])
         except (httpx.HTTPError, OSError) as exc:
             log.warning("memory recall skipped (%s)", exc)
             return []
+
+    async def recall_many(
+        self,
+        *,
+        tenant_id: str,
+        queries: list[tuple[str, str]],  # (scope_key, query)
+        token_budget: int = 400,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Concurrent recalls (semaphore-bounded) keyed by scope_key."""
+        results = await asyncio.gather(
+            *(
+                self.recall(
+                    tenant_id=tenant_id, scope_key=s, query=q, token_budget=token_budget
+                )
+                for s, q in queries
+            )
+        )
+        return {scope: memories for (scope, _), memories in zip(queries, results, strict=True)}

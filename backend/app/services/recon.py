@@ -81,6 +81,15 @@ async def commit_proposal(
     amount = int(proposal["amount_paise"])
     tds = int(proposal.get("tds_paise", 0))
 
+    # guarded transitions: under concurrency, exactly one committer wins —
+    # the loser sees rowcount 0 and backs out before any ledger write
+    if not await repo.set_invoice_paid(invoice.id):
+        return {"committed": False, "reason": "invoice already matched"}
+    if not await repo.set_transaction_matched(txn_id):
+        # we hold the invoice row lock — safe to undo the staged flip
+        await repo.revert_invoice_open(invoice.id)
+        return {"committed": False, "reason": "transaction already matched"}
+
     match = Match(
         id=uuid7(),
         tenant_id=tenant_id,
@@ -94,8 +103,6 @@ async def commit_proposal(
         status="committed",
     )
     await repo.add_match(match)
-    await repo.set_transaction_matched(txn_id)
-    await repo.set_invoice_paid(invoice.id)
 
     lines = [{"account": "bank", "amount_paise": amount}]
     if tds:

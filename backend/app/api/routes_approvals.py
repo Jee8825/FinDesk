@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.auth.deps import Auth
 from app.db import session_scope
-from app.services.approvals import decide_approval, list_approvals
+from app.services.approvals import ToolExecutionError, decide_approval, list_approvals
 
 router = APIRouter(tags=["approvals"])
 
@@ -55,15 +55,19 @@ async def get_approvals(auth: Auth, status_filter: str | None = "pending") -> li
 async def decide(approval_id: str, body: DecideRequest, auth: Auth) -> dict[str, Any]:
     if auth.role not in DECIDER_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "role cannot decide approvals")
-    async with session_scope() as session:
-        result = await decide_approval(
-            session,
-            tenant_id=auth.tenant_id,
-            approval_id=approval_id,
-            decision=body.decision,
-            decider_id=auth.user_id,
-            rationale=body.rationale,
-        )
+    try:
+        async with session_scope() as session:
+            result = await decide_approval(
+                session,
+                tenant_id=auth.tenant_id,
+                approval_id=approval_id,
+                decision=body.decision,
+                decider_id=auth.user_id,
+                rationale=body.rationale,
+            )
+    except ToolExecutionError as exc:
+        # decision rolled back atomically — approval stays pending, retryable
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     if not result.get("ok"):
         raise HTTPException(status.HTTP_409_CONFLICT, result.get("reason", "cannot decide"))
     return result

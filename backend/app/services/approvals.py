@@ -21,6 +21,15 @@ from app.db.models import Approval
 from app.services.audit import write_audit
 
 
+class ToolExecutionError(Exception):
+    """An approved action's tool call failed — the decision is rolled back.
+
+    Raised so the surrounding session_scope aborts: the approval stays
+    pending, no token is recorded, and the caller can retry safely (the tools
+    are pre-side-effect on failure — refusal happens before any write).
+    """
+
+
 def action_hash(payload: dict[str, Any]) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()
@@ -126,13 +135,19 @@ async def decide_approval(
             if wc_action is not None:
                 wc_action.status = "rejected"
         else:
+            import asyncio
+
             from findesk_tools.treds import SandboxTredsProvider, TredsQuote
 
-            receipt = SandboxTredsProvider().list_invoice(
-                tenant_id=tenant_id,
-                quote=TredsQuote(**payload["quote"]),
-                approval_token=token_id,
-            )
+            try:
+                receipt = await asyncio.to_thread(
+                    SandboxTredsProvider().list_invoice,
+                    tenant_id=tenant_id,
+                    quote=TredsQuote(**payload["quote"]),
+                    approval_token=token_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — abort decision atomically
+                raise ToolExecutionError(f"TReDS listing failed: {exc}") from exc
             await write_audit(
                 session,
                 tenant_id=tenant_id,
@@ -174,10 +189,19 @@ async def decide_approval(
             thread_ref=payload.get("thread_ref"),
         )
         # token consumed here: it exists only for this send and is recorded on
-        # the message, the approval row, and the audit chain
-        receipt = SandboxEmailProvider(get_settings().outbox_dir).send(
-            tenant_id=tenant_id, draft=draft, approval_token=token_id
-        )
+        # the message, the approval row, and the audit chain. Tool call is
+        # sync file I/O → off the event loop; failure aborts the decision.
+        import asyncio
+
+        try:
+            receipt = await asyncio.to_thread(
+                SandboxEmailProvider(get_settings().outbox_dir).send,
+                tenant_id=tenant_id,
+                draft=draft,
+                approval_token=token_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — abort decision atomically
+            raise ToolExecutionError(f"email send failed: {exc}") from exc
         await write_audit(
             session,
             tenant_id=tenant_id,

@@ -8,6 +8,7 @@ and ship with explicit review-with-your-CA framing.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -55,37 +56,54 @@ async def radar(auth: Auth) -> RadarOut:
     async with session_scope() as session:
         repo = BooksRepo(session)
         parties = {c.id: c.name for c in await repo.counterparties(auth.tenant_id)}
+        rows = await recompute_clocks(session, auth.tenant_id)
 
-        for inv, _clock, snap in await recompute_clocks(session, auth.tenant_id):
-            memories = await memoryclient.retrieve_units(
-                tenant_id=auth.tenant_id,
-                scope_key=f"client:{inv.counterparty_id}",
-                query="payment behavior: how late does this client pay?",
-            )
-            lates = parse_late_days([m.get("content", "") for m in memories.values()])
-            avg_late = round(sum(lates) / len(lates), 1) if lates else None
-            predicted = (
-                (inv.due_date + timedelta(days=avg_late)).date().isoformat()
-                if avg_late is not None
-                else None
-            )
-
-            if snap["overdue_days"] > 0:
-                total_overdue += inv.amount_paise
-                total_interest += snap["accrued_interest_paise"]
-
-            items.append(
-                RadarItem(
-                    invoice_id=inv.id,
-                    invoice_number=inv.number,
-                    client=parties.get(inv.counterparty_id, "?"),
-                    amount_paise=inv.amount_paise,
-                    clock=snap,
-                    predicted_payment_date=predicted,
-                    avg_days_late=avg_late,
-                    behavior_observations=len(lates),
+    # one memory retrieval per *client* (not per invoice), all concurrent —
+    # the memoryclient semaphore bounds the fan-out
+    client_ids = sorted({inv.counterparty_id for inv, _, _ in rows})
+    recalled = dict(
+        zip(
+            client_ids,
+            await asyncio.gather(
+                *(
+                    memoryclient.retrieve_units(
+                        tenant_id=auth.tenant_id,
+                        scope_key=f"client:{cid}",
+                        query="payment behavior: how late does this client pay?",
+                    )
+                    for cid in client_ids
                 )
+            ),
+            strict=True,
+        )
+    )
+
+    for inv, _clock, snap in rows:
+        memories = recalled.get(inv.counterparty_id, {})
+        lates = parse_late_days([m.get("content", "") for m in memories.values()])
+        avg_late = round(sum(lates) / len(lates), 1) if lates else None
+        predicted = (
+            (inv.due_date + timedelta(days=avg_late)).date().isoformat()
+            if avg_late is not None
+            else None
+        )
+
+        if snap["overdue_days"] > 0:
+            total_overdue += inv.amount_paise
+            total_interest += snap["accrued_interest_paise"]
+
+        items.append(
+            RadarItem(
+                invoice_id=inv.id,
+                invoice_number=inv.number,
+                client=parties.get(inv.counterparty_id, "?"),
+                amount_paise=inv.amount_paise,
+                clock=snap,
+                predicted_payment_date=predicted,
+                avg_days_late=avg_late,
+                behavior_observations=len(lates),
             )
+        )
 
     items.sort(key=lambda i: i.clock["overdue_days"], reverse=True)
     return RadarOut(

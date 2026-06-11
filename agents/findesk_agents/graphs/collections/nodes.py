@@ -29,16 +29,18 @@ async def draft(state: CollectionsState) -> dict:
     step_id = uuid7()
     await state.emitter.step("draft", "started", step_id)
     now = datetime.now(UTC)
+    client_ids = sorted({item["client"]["id"] for item in state.overdue})
+    recalled = await state.memory.recall_many(
+        tenant_id=state.tenant_id,
+        queries=[
+            (f"client:{cid}", "payment behavior and reliability of this client")
+            for cid in client_ids
+        ],
+    )
     drafts = []
     for item in state.overdue:
         invoice, client = item["invoice"], item["client"]
-        memories = await state.memory.recall(
-            tenant_id=state.tenant_id,
-            scope_key=f"client:{client['id']}",
-            query="payment behavior and reliability of this client",
-            token_budget=400,
-        )
-        profile = drafting.behavior_profile(memories)
+        profile = drafting.behavior_profile(recalled.get(f"client:{client['id']}", []))
         days_overdue = (now - datetime.fromisoformat(invoice["due_date"])).days
         composed = drafting.compose_draft(
             invoice, client, profile, days_overdue=days_overdue, sender_name=state.sender_name

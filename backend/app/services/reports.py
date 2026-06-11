@@ -127,9 +127,11 @@ async def month_end_report(session: AsyncSession, tenant_id: str, period: str) -
         entry["why"].append({"kind": "bank_transaction", "id": t.id})
 
     # ---- reconciliation ----------------------------------------------------
+    txn_by_id = {t.id: t for t in txns}  # O(n+m), not O(n·m)
     matched_amount = sum(
-        next((t.amount_paise for t in txns if t.id == m.bank_transaction_id), 0)
+        txn_by_id[m.bank_transaction_id].amount_paise
         for m in matches
+        if m.bank_transaction_id in txn_by_id
     )
     tds_matches = [m for m in matches if m.kind == "tds_adjusted"]
     unmatched_in_period = [t for t in txns if t.match_status == "unmatched"]

@@ -100,9 +100,8 @@ def clock_snapshot(
     return {
         "acceptance_date": acceptance_date.isoformat(),
         "statutory_due_date": due.isoformat(),
-        "day_count": min((now - acceptance_date).days, STATUTORY_WINDOW_DAYS)
-        if days == 0
-        else STATUTORY_WINDOW_DAYS,
+        # days consumed on the 45-day clock, clamped to [0, 45]
+        "day_count": max(0, min((now - acceptance_date).days, STATUTORY_WINDOW_DAYS)),
         "overdue_days": days,
         "accrued_interest_paise": accrued_interest_paise(amount_paise, days, bank_rate_bps),
         "annual_rate_bps": annual_rate_bps(bank_rate_bps),
