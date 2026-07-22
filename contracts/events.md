@@ -17,8 +17,16 @@ Shapes for Redis stream messages and SSE events. All events share the envelope:
 ## Streams
 
 `agents:interactive` (user-triggered, low latency) · `agents:batch` (scheduled
-sweeps). Consumer groups per graph type. At-least-once; consumers must be
-idempotent on `id`.
+sweeps) · `agents:dead` (poison jobs — see below). Consumer groups per graph
+type. At-least-once; consumers must be idempotent on `id`.
+
+**Pending-entry adoption:** workers use a stable consumer name and
+periodically claim entries idle past `worker_reclaim_idle_ms`
+(default 60s). An entry already delivered `worker_max_deliveries` times
+(default 3) is poison: it is appended to `agents:dead` verbatim plus a
+`dead_reason` field, its run is closed with `run.done@v1{status:"failed"}`,
+and it is acked off the main stream. `agents:dead` has no consumer group —
+it is an operator inspection surface (`XRANGE agents:dead - +`).
 
 ## Job events (backend → agents)
 

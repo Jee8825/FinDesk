@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     jobs_stream_interactive: str = "agents:interactive"
     jobs_consumer_group: str = "workers"
     events_stream: str = "agents:events"
+    jobs_dead_stream: str = "agents:dead"  # poison jobs after max deliveries
+    # STABLE across restarts — a random name orphans this worker's pending
+    # entries forever when it dies (nobody reclaims a stranger's PEL).
+    worker_consumer_name: str = "worker-main"
+    worker_max_deliveries: int = 3
+    worker_reclaim_idle_ms: int = 60_000
+    worker_reclaim_every_s: int = 30
 
     # LLM (Groq or any OpenAI-compatible endpoint). Empty key = deterministic-only.
     groq_api_key: str = ""
