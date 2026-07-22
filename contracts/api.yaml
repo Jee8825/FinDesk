@@ -136,6 +136,8 @@ paths:
       summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
       responses: { "200": { description: queued } }
 
+  /audit/verify:
+    get: { tags: [trust], summary: "Recompute the tenant's hash-chained audit log live — {valid, entries, head_hash, broken_at?}", responses: { "200": { description: verification } } }
   /dataroom:
     get: { tags: [cash], summary: Credit-ready data room — FinDesk Score + verified evidence, responses: { "200": { description: room } } }
   /dataroom/share:

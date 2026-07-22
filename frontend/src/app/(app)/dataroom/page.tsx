@@ -10,6 +10,27 @@ import { DataRoomView } from "@/components/DataRoomView";
 import { Card, ErrorNote, MonoLabel, PageShell, PrimaryBtn, Skeleton } from "@/components/ui";
 import { api } from "@/lib/api";
 
+function AuditChip() {
+  const audit = useQuery({ queryKey: ["audit-verify"], queryFn: () => api.auditVerify() });
+  const a = audit.data;
+  if (!a) return null;
+  return (
+    <span
+      className={`mono-label inline-flex items-center gap-1.5 rounded-full border px-3 py-1 ${
+        a.valid ? "border-mint/40 text-mint" : "border-blush/50 text-blush"
+      }`}
+      title={
+        a.valid
+          ? `hash chain recomputed live · head ${a.head_hash.slice(0, 12)}…`
+          : `chain breaks at entry #${a.broken_at?.index} (${a.broken_at?.action})`
+      }
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${a.valid ? "bg-mint" : "bg-blush"}`} />
+      {a.valid ? `audit chain verified · ${a.entries} entries` : "audit chain BROKEN"}
+    </span>
+  );
+}
+
 export default function DataRoomPage() {
   const room = useQuery({ queryKey: ["dataroom"], queryFn: () => api.dataroom() });
   const [copied, setCopied] = useState(false);
@@ -36,9 +57,12 @@ export default function DataRoomPage() {
       subtitle="Credit-ready exports, FinDesk Score, lender share links"
       annotation="GET /dataroom · tokenized share links"
     >
-      <p className="mono-annot mb-5">
-        ◇ b5 · credit-ready exports + findesk score · tokenized share links for lenders
-      </p>
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <p className="mono-annot">
+          ◇ b5 · credit-ready exports + findesk score · tokenized share links for lenders
+        </p>
+        <AuditChip />
+      </div>
 
       {room.isLoading && <Skeleton className="h-96" />}
       {room.isError && <ErrorNote>Could not build the data room.</ErrorNote>}

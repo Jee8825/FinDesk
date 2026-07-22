@@ -67,3 +67,12 @@ async def shared_view(token: str) -> dict[str, Any]:
         room = await build_dataroom(session, payload["ten"])
     room["shared"] = {"read_only": True, "expires_at": payload["exp"]}
     return room
+
+
+@router.get("/audit/verify")
+async def audit_verify(auth: Auth) -> dict[str, Any]:
+    """Recompute the tenant's hash-chained audit log live — tamper-evidence on demand."""
+    from app.services.audit import verify_chain
+
+    async with session_scope() as session:
+        return await verify_chain(session, auth.tenant_id)

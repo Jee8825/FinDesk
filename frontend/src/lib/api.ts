@@ -401,6 +401,13 @@ export const api = {
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
   payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
+  auditVerify: () =>
+    request<{
+      valid: boolean;
+      entries: number;
+      head_hash: string;
+      broken_at?: { index: number; id: string; action: string };
+    }>("GET", apiPaths.GET_AUDIT_VERIFY),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",
