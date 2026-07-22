@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 
 import { api, clearTokens, getToken, setTokens } from "@/lib/api";
 
+import { LiquidMark, LiveRing } from "@/components/fx";
+
 import { Providers } from "../providers";
 
 type NavItem = { href: string; label: string; badge?: number };
@@ -81,7 +83,7 @@ function TenantCard() {
     <div className="relative mt-3">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border-[1.5px] border-dashed border-[#ccc7bb] px-2.5 py-2 text-left transition-colors hover:border-faint"
+        className="flex w-full items-center justify-between gap-2 rounded-lg border-[1.5px] border-dashed border-line px-2.5 py-2 text-left transition-colors hover:border-faint"
       >
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold text-ink">
@@ -100,13 +102,13 @@ function TenantCard() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="absolute left-0 right-0 z-40 mt-1 overflow-hidden rounded-lg border border-line bg-cream shadow-card"
+            className="absolute left-0 right-0 z-40 mt-1 overflow-hidden glass-strong rounded-lg border border-line shadow-card"
           >
             {me.data!.memberships.map((m) => (
               <li key={m.tenant_id}>
                 <button
                   onClick={() => switchTo(m.tenant_id)}
-                  className={`block w-full px-3 py-2 text-left text-xs transition-colors hover:bg-cream2 ${
+                  className={`block w-full px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.06] ${
                     m.tenant_id === me.data!.active_tenant_id
                       ? "font-semibold text-ink"
                       : "text-mute"
@@ -137,12 +139,11 @@ function AgentHealthBadge() {
   const dot = allLive ? "bg-moss" : known ? "bg-claret" : "bg-line";
   return (
     <div className="flex items-center gap-2" title="live probe: worker consumer + memory engine">
-      <span className="relative flex h-2 w-2">
-        {allLive && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-moss opacity-60" />
-        )}
+      {known ? (
+        <LiveRing live={!!allLive} size={22} />
+      ) : (
         <span className={`relative inline-flex h-2 w-2 rounded-full ${dot}`} />
-      </span>
+      )}
       <span className="mono-label text-mute">{label}</span>
     </div>
   );
@@ -204,17 +205,14 @@ function Sidebar() {
   const router = useRouter();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col overflow-y-auto border-r border-line bg-gradient-to-b from-cream to-cream2 shadow-side">
+    <aside className="glass-rail sticky top-0 flex h-screen w-[236px] shrink-0 flex-col overflow-y-auto border-r border-line2 shadow-side">
       <div className="border-b-[1.5px] border-line2 px-4 pb-4 pt-5">
         <Link href="/" className="flex items-center gap-2.5">
-          <motion.div
-            whileHover={{ rotate: -4, scale: 1.05 }}
-            className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border-2 border-ink text-base font-bold text-ink"
-          >
-            F
+          <motion.div whileHover={{ rotate: -4, scale: 1.05 }}>
+            <LiquidMark size={34} />
           </motion.div>
           <div>
-            <div className="text-[15px] font-bold tracking-[-0.01em] text-ink">FinDesk</div>
+            <div className="font-display text-[15px] font-bold tracking-[-0.01em] text-ink">FinDesk</div>
             <div className="mono-label text-faint">autonomous cfo</div>
           </div>
         </Link>
@@ -243,7 +241,7 @@ function Sidebar() {
                   )}
                   <span
                     className={`relative z-10 flex items-center justify-between rounded-lg px-2.5 py-[7px] text-[13px] font-semibold transition-colors ${
-                      active ? "text-white" : "text-mute hover:text-ink"
+                      active ? "text-paper" : "text-mute hover:text-ink"
                     }`}
                   >
                     {item.label}
@@ -267,7 +265,7 @@ function Sidebar() {
             clearTokens();
             router.replace("/login");
           }}
-          className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-faint transition-colors hover:bg-cream hover:text-ink"
+          className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-faint transition-colors hover:bg-white/[0.06] hover:text-ink"
         >
           <LogOut size={12} /> Sign out
         </button>

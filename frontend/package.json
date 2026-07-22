@@ -10,7 +10,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@paper-design/shaders-react": "^0.0.77",
     "@tanstack/react-query": "^5.101.0",
+    "cmdk": "^1.1.1",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",
     "next": "14.2.33",
