@@ -28,3 +28,16 @@ test("palette finds a transaction and jumps to its Why? drawer", async ({ page }
   await expect(page).toHaveURL(/\/books\?why=/);
   await expect(page.getByText("Every figure answers Why?")).toBeVisible({ timeout: 10_000 });
 });
+
+test("ledger beam pulses while an agent run is live", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("[data-agent-live]")).toHaveCount(0);
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const input = page.getByPlaceholder(/Jump to a page/);
+  await input.fill("run scan for anomalies");
+  await page.keyboard.press("Enter");
+
+  // queued run flips the shell attribute; beam CSS keys off it
+  await expect(page.locator('[data-agent-live="true"]')).toHaveCount(1, { timeout: 10_000 });
+});

@@ -3,7 +3,7 @@
 // transaction and jump straight to its Why? chain. Runs land in the same
 // gated pipeline as everywhere else (nothing consequential bypasses
 // approvals). cmdk does the fuzzy matching; we feed it value strings.
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
   ArrowRight,
@@ -73,6 +73,7 @@ const AGENT_ACTIONS: Array<{
 
 export function CommandPalette() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [queued, setQueued] = useState<string | null>(null);
 
@@ -107,6 +108,7 @@ export function CommandPalette() {
     setQueued(label);
     try {
       await api.startRun(graph);
+      queryClient.invalidateQueries({ queryKey: ["runs"] }); // beam pulses now
       setTimeout(() => {
         setQueued(null);
         setOpen(false);

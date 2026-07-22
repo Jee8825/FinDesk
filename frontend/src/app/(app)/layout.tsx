@@ -51,6 +51,16 @@ function useQueueCounts(enabled: boolean) {
   };
 }
 
+function useAgentLive(): boolean {
+  const runs = useQuery({
+    queryKey: ["runs"],
+    queryFn: () => api.listRuns(),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+  return (runs.data ?? []).some((r) => r.status === "running" || r.status === "queued");
+}
+
 function useAgentHealth() {
   const health = useQuery({
     queryKey: ["agent-health"],
@@ -292,6 +302,16 @@ function Sidebar() {
   );
 }
 
+function Shell({ children }: { children: React.ReactNode }) {
+  const live = useAgentLive();
+  return (
+    <div className="flex min-h-screen" data-agent-live={live || undefined}>
+      <Sidebar />
+      <main className="flex min-w-0 flex-1 flex-col">{children}</main>
+    </div>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
@@ -302,10 +322,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <Providers>
       <CommandPalette />
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
-      </div>
+      <Shell>{children}</Shell>
     </Providers>
   );
 }
