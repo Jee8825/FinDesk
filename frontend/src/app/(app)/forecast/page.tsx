@@ -16,6 +16,7 @@ import {
   PrimaryBtn,
   Skeleton,
 } from "@/components/ui";
+import { ForecastTerrain } from "@/components/ForecastTerrain";
 import { api, formatINR, formatINRCompact, type ForecastOut, type ForecastWeek } from "@/lib/api";
 
 const W = 720;
@@ -171,7 +172,7 @@ export default function ForecastPage() {
                 <span className="text-blush">● downside</span>
               </div>
             </div>
-            <BandsChart f={f} />
+            <ForecastTerrain f={f} fallback={<BandsChart f={f} />} />
             <div className="mt-2 flex items-center justify-between">
               <span className="mono-annot">
                 opening {formatINRCompact(f.opening_balance_paise)} · recurring outflow ~
