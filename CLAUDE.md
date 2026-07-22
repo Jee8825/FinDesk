@@ -19,7 +19,7 @@ Full spec: `docs/product/FinDesk_Product_Build_Specification.pdf`.
 - Orchestration: **LangGraph** (Planner → Executor → Critic → Approval Gate), Python 3.11+
 - Backend: **FastAPI** + Pydantic v2 + SQLAlchemy 2 (async) + Alembic, Postgres 16
 - Memory: **Recall** engine, vendored at `memory/` (FastAPI service; Postgres+pgvector, Neo4j, Redis)
-- Tools: **MCP servers** in `tools/` (banks/AA, Tally, Zoho, GST/IMS, email, TReDS)
+- Tools: **MCP servers** in `tools/` — implemented: bank_statements, ledger_import, tally (fixture-driven HTTP-XML), email (sandbox), treds (sandbox); planned: account_aggregator, zoho_books, gst_portal, ims, einvoice
 - Frontend: **Next.js 14** + TypeScript + Tailwind + shadcn/ui
 - Queue/cache: Redis 7 (streams for agent jobs)
 - Observability: Langfuse + OpenTelemetry GenAI conventions; append-only audit log
@@ -48,8 +48,10 @@ LLM loop** → everything traced to Langfuse + audit log. Layer deep-dives in
    make the frontend guess.
 2. **No money movement, no auto-send.** Anything that touches funds, sends
    external email, or files anything legal is *recommend-only* behind the
-   approval gate. Guardrails are deterministic code in `backend/…/guardrails`
-   and `agents/…/policies` — never prompt text.
+   approval gate. Guardrails are deterministic code — the approval engine in
+   `backend/app/services/approvals.py`, the statutory clocks in
+   `backend/app/services/statutory.py`, and the tool layer's hard
+   `approval_token` refusals — never prompt text.
 3. **All prompts in `prompts/`**, loaded by name. No inline prompt strings.
 4. **No raw SQL outside repository modules.** Engine/agent code stays ORM-free
    and provider-agnostic (protocols, not vendor SDKs).
