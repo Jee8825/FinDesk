@@ -150,7 +150,7 @@ async def resolve_conflict(
     keep = conflict.claim_a if winner == "a" else conflict.claim_b
     drop = conflict.claim_b if winner == "a" else conflict.claim_a
 
-    deleted = await memoryclient.delete_memory(drop["memory_id"])
+    deleted = await memoryclient.delete_memory(tenant_id=tenant_id, memory_id=drop["memory_id"])
     # Reinforce the winner via retrieval — the engine boosts strength on every
     # hit. (Never re-ingest a restatement: a near-duplicate belief would be
     # flagged as a new conflict against itself.)

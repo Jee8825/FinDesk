@@ -77,6 +77,11 @@ paths:
       responses: { "200": { description: text/event-stream } }
   /agent/runs/{run_id}/cancel:
     post: { tags: [agent], summary: Cancel a run, responses: { "200": { description: cancelled } } }
+  /agent/health:
+    get:
+      tags: [agent]
+      summary: Live subsystem health — worker consumer liveness + memory-engine reachability
+      responses: { "200": { description: "{worker: bool, memory: bool}" } }
 
   /conflicts:
     get: { tags: [conflicts], summary: Conflict cards (filter by status), responses: { "200": { description: page } } }

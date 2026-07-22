@@ -49,24 +49,33 @@ async def user_owned(
 
 
 @router.get("/memory/{memory_id}/why", response_model=WhyResult)
-async def why(memory_id: uuid.UUID, engine: RecallEngine = Depends(engine_dep)) -> WhyResult:
-    return await engine.why(memory_id)
+async def why(
+    memory_id: uuid.UUID,
+    tenant_id: str = "default",
+    engine: RecallEngine = Depends(engine_dep),
+) -> WhyResult:
+    return await engine.why(memory_id, tenant_id)
 
 
 @router.delete("/memory/{memory_id}")
 async def delete(
     memory_id: uuid.UUID,
     cascade: bool = Query(default=True),
+    tenant_id: str = "default",
     engine: RecallEngine = Depends(engine_dep),
 ) -> dict:
-    deleted = await engine.delete(memory_id, cascade=cascade)
-    return {"deleted": True, "provenance_nodes_removed": deleted}
+    deleted, nodes = await engine.delete(memory_id, cascade=cascade, tenant_id=tenant_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="memory not found in tenant")
+    return {"deleted": True, "provenance_nodes_removed": nodes}
 
 
 @router.post("/memory/promote")
 async def promote(req: PromoteRequest, engine: RecallEngine = Depends(engine_dep)) -> dict:
     try:
-        await engine.promote(req.memory_id, req.scope, req.team_id, req.is_orchestrator)
+        await engine.promote(
+            req.memory_id, req.scope, req.team_id, req.is_orchestrator, req.tenant_id
+        )
     except ScopeError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     return {"promoted": True}

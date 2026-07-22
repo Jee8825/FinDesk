@@ -151,6 +151,11 @@ class RecallEngine:
         else:
             surviving_emb = (await self.embedder.embed([surviving_text]))[0]
 
+        # A decisive resolution (the new belief supersedes or merges the old) is
+        # a corroboration event: confidence rises with diminishing returns and the
+        # corroboration count carries forward so the returns actually diminish.
+        is_corroboration = decision.resolution in ("auto_resolved", "merged")
+        new_corroboration_count = existing.corroboration_count + 1 if is_corroboration else 0
         new_conf = {
             "auto_resolved": confidence.corroborate(
                 max(existing.confidence, fact.confidence), existing.corroboration_count
@@ -174,11 +179,15 @@ class RecallEngine:
             team_id=req.team_id,
             cluster=fact.cluster or existing.cluster,
             source_session_id=req.session_id,
+            corroboration_count=new_corroboration_count,
         )
 
-        # For decisive resolutions, retire the superseded belief.
-        if decision.resolution in ("auto_resolved", "merged"):
+        # For decisive resolutions, retire the superseded belief. Mark it in
+        # memory too so later facts in this same ingest batch don't conflict
+        # against an already-tombstoned belief.
+        if is_corroboration:
             await repository.set_status(s, existing.id, "tombstoned")
+            existing.status = "tombstoned"
 
         await conflict.log_conflict(
             s,
@@ -202,6 +211,12 @@ class RecallEngine:
             existing.id, session_id=req.session_id, weight=0.12, note=fact.content
         )
         await self.provenance.link_resolution(unit.id, [existing.id])
+        if is_corroboration:
+            # The surviving belief is corroborated by the prior one it supersedes;
+            # record the evidence edge so `why` reflects the reinforcement.
+            await self.provenance.record_corroboration(
+                unit.id, session_id=req.session_id, weight=0.15, note=existing.content
+            )
 
         log.info(
             "conflict.resolved",
@@ -242,7 +257,9 @@ class RecallEngine:
                     self.settings.reinforcement_factor,
                     now,
                 )
-                await repository.apply_reinforcement(s, u.id, new_strength)
+                await repository.apply_reinforcement(
+                    s, u.id, new_strength, session_id=req.session_id
+                )
                 results.append(
                     RetrievedMemory(
                         id=u.id,
@@ -279,7 +296,20 @@ class RecallEngine:
         return False
 
     # ----------------------------- why / manage -----------------------------
-    async def why(self, memory_id: uuid.UUID) -> WhyResult:
+    async def why(self, memory_id: uuid.UUID, tenant_id: str = "default") -> WhyResult:
+        # Guard: never expose another tenant's provenance. The graph is keyed by
+        # memory_id alone, so authorize against the relational tenant first.
+        async with session_scope() as s:
+            owner = await repository.get_memory_scoped(s, memory_id, tenant_id=tenant_id)
+        if owner is None:
+            return WhyResult(
+                memory_id=memory_id,
+                confidence=None,
+                status=None,
+                explanation="",
+                evidence=[],
+                resolved_from=[],
+            )
         chain = await self.provenance.explain(memory_id)
         return WhyResult(
             memory_id=memory_id,
@@ -296,12 +326,17 @@ class RecallEngine:
         scope,
         team_id: str | None,
         is_orchestrator: bool = False,
+        tenant_id: str = "default",
     ) -> None:
         scoping.validate_promotion(
             target_scope=scope, is_orchestrator=is_orchestrator, team_id=team_id
         )
         async with session_scope() as s:
-            await repository.update_scope(s, memory_id, scope, team_id)
+            rows = await repository.update_scope(
+                s, memory_id, scope, team_id, tenant_id=tenant_id
+            )
+        if rows == 0:
+            raise scoping.ScopeError("memory not found in tenant")
 
     # ------------------------- consolidation / prefetch -------------------------
     async def consolidate(self, user_id: str, tenant_id: str = "default") -> dict:
@@ -326,13 +361,22 @@ class RecallEngine:
             tenant_id=tenant_id,
         )
 
-    async def delete(self, memory_id: uuid.UUID, cascade: bool = True) -> int:
+    async def delete(
+        self, memory_id: uuid.UUID, cascade: bool = True, tenant_id: str = "default"
+    ) -> tuple[bool, int]:
+        """Delete a memory (tenant-scoped). Returns ``(deleted, provenance_nodes)``.
+
+        Authorizes against the tenant before touching either store, so a UUID
+        alone can't delete another tenant's memory or provenance.
+        """
+        async with session_scope() as s:
+            deleted = await repository.delete_memory(s, memory_id, tenant_id=tenant_id)
+        if not deleted:
+            return False, 0
         deleted_nodes = 0
         if cascade:
             deleted_nodes = await self.provenance.cascade_delete(memory_id)
-        async with session_scope() as s:
-            await repository.delete_memory(s, memory_id)
-        return deleted_nodes
+        return True, deleted_nodes
 
     async def list_user_owned(
         self, user_id: str, tenant_id: str = "default"

@@ -65,6 +65,15 @@ class RunRepo:
         """Events-consumer path only — never expose through the API."""
         return await self.session.get(AgentRun, run_id)
 
+    async def active_run(self, tenant_id: str, graph: str) -> AgentRun | None:
+        return await self.session.scalar(
+            select(AgentRun).where(
+                AgentRun.tenant_id == tenant_id,
+                AgentRun.graph == graph,
+                AgentRun.status.in_(["queued", "running"]),
+            )
+        )
+
     async def list_for_tenant(self, tenant_id: str, limit: int = 50) -> list[AgentRun]:
         rows = await self.session.scalars(
             select(AgentRun)

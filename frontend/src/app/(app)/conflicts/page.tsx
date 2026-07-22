@@ -1,45 +1,56 @@
 "use client";
-
+// Conflicts — "Card stack" (wireframe Conflicts A, signature surface A4):
+// both claims side-by-side, confidence bars, one-tap resolve. The agent never
+// silently overwrites a contested belief.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 
+import {
+  Bar,
+  Card,
+  EmptyState,
+  ErrorNote,
+  MonoLabel,
+  PageShell,
+  Skeleton,
+} from "@/components/ui";
 import { api, type ConflictCard } from "@/lib/api";
 
 function ClaimBox({
   label,
   content,
   confidence,
-  onPick,
-  disabled,
+  kind,
 }: {
   label: string;
   content: string;
   confidence: number | null;
-  onPick: () => void;
-  disabled: boolean;
+  kind: "memory" | "new";
 }) {
   const pct = Math.round((confidence ?? 0) * 100);
+  const memory = kind === "memory";
   return (
-    <div className="flex flex-1 flex-col rounded-lg border bg-slate-50 p-4">
-      <p className="text-xs font-medium uppercase text-slate-400">{label}</p>
-      <p className="mt-1 flex-1 text-sm text-slate-800">{content}</p>
-      <div className="mt-3">
-        <div className="h-1.5 w-full rounded bg-slate-200">
-          <div className="h-1.5 rounded bg-teal-brand" style={{ width: `${pct}%` }} />
-        </div>
-        <p className="mt-1 text-xs text-slate-500">confidence {pct}%</p>
+    <motion.div
+      initial={{ opacity: 0, x: memory ? -18 : 18 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className={`flex flex-1 flex-col rounded-2xl border p-5 ${
+        memory ? "border-memory/30 bg-memory/5" : "border-accent/30 bg-accent/5"
+      }`}
+    >
+      <MonoLabel className={memory ? "!text-memory" : "!text-accent"}>{label}</MonoLabel>
+      <p className="mt-2 flex-1 text-[15px] font-semibold leading-snug text-ink">{content}</p>
+      <div className="mt-4">
+        <Bar pct={pct} tone={memory ? "memory" : "accent"} />
+        <p className={`mono-annot mt-1.5 ${memory ? "!text-memory" : "!text-accent"}`}>
+          confidence {(pct / 100).toFixed(2)}
+        </p>
       </div>
-      <button
-        onClick={onPick}
-        disabled={disabled}
-        className="mt-3 rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-      >
-        Keep this
-      </button>
-    </div>
+    </motion.div>
   );
 }
 
-function Card({ conflict }: { conflict: ConflictCard }) {
+function TopCard({ conflict, index, total }: { conflict: ConflictCard; index: number; total: number }) {
   const queryClient = useQueryClient();
   const resolve = useMutation({
     mutationFn: (winner: "a" | "b") => api.resolveConflict(conflict.id, winner),
@@ -47,82 +58,133 @@ function Card({ conflict }: { conflict: ConflictCard }) {
   });
 
   return (
-    <li className="rounded-xl border bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-ink">
-          {conflict.engine_view.counterparty ?? conflict.scope_key}
-          <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-            {conflict.claim_kind.replace("_", " ")}
-          </span>
-        </p>
-        <p className="text-xs text-slate-400">
-          semantic distance {(conflict.engine_view.semantic_distance ?? 0).toFixed(3)}
-        </p>
+    <Card className="border-accent/30 p-7">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-[-0.01em] text-ink">
+            {conflict.engine_view.counterparty ?? conflict.scope_key} —{" "}
+            {conflict.claim_kind.replace(/_/g, " ")} in conflict
+          </h2>
+          <p className="mt-1 text-sm text-mute">
+            two claims disagree · engine distance{" "}
+            {(conflict.engine_view.semantic_distance ?? 0).toFixed(3)}
+          </p>
+        </div>
+        <span className="mono-annot whitespace-nowrap">
+          conflict <span className="font-semibold text-accent">{index + 1} of {total}</span>
+        </span>
       </div>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+
+      <div className="mt-6 flex flex-col items-stretch gap-4 md:flex-row md:items-center">
         <ClaimBox
-          label="Existing belief"
+          label="claim a · memory (stored belief)"
           content={conflict.claim_a.content}
           confidence={conflict.claim_a.confidence}
-          onPick={() => resolve.mutate("a")}
-          disabled={resolve.isPending}
+          kind="memory"
         />
+        <span className="mono-label shrink-0 self-center text-faint">vs</span>
         <ClaimBox
-          label="New observation"
+          label="claim b · new observation"
           content={conflict.claim_b.content}
           confidence={conflict.claim_b.confidence}
-          onPick={() => resolve.mutate("b")}
-          disabled={resolve.isPending}
+          kind="new"
         />
       </div>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-2">
+        <motion.button
+          whileHover={{ scale: 1.015 }}
+          whileTap={{ scale: 0.97 }}
+          disabled={resolve.isPending}
+          onClick={() => resolve.mutate("a")}
+          className="rounded-xl bg-memory px-4 py-3 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(74,111,165,0.7)] transition-colors hover:bg-[#3d5e8e] disabled:opacity-50"
+        >
+          Keep the stored belief
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.015 }}
+          whileTap={{ scale: 0.97 }}
+          disabled={resolve.isPending}
+          onClick={() => resolve.mutate("b")}
+          className="rounded-xl bg-accent px-4 py-3 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(232,115,10,0.7)] transition-colors hover:bg-[#d96905] disabled:opacity-50"
+        >
+          Accept the new observation
+        </motion.button>
+      </div>
+
       {conflict.engine_view.engine_rationale && (
-        <p className="mt-3 text-xs text-slate-500">
-          engine: {conflict.engine_view.engine_rationale}
-        </p>
+        <p className="mono-annot mt-4">◇ engine: {conflict.engine_view.engine_rationale}</p>
       )}
+      <p className="mono-annot mt-1.5">
+        ◇ POST /conflicts/:id/resolve — writes belief + provenance atomically; the loser is
+        forgotten, the winner reinforced
+      </p>
       {resolve.isError && (
-        <p className="mt-2 text-sm text-red-600" role="alert">
+        <ErrorNote>
           {resolve.error instanceof Error ? resolve.error.message : "resolution failed"}
-        </p>
+        </ErrorNote>
       )}
-    </li>
+    </Card>
   );
 }
 
 export default function ConflictsPage() {
   const conflicts = useQuery({ queryKey: ["conflicts"], queryFn: () => api.conflicts() });
+  const open = conflicts.data ?? [];
+  const [top, ...rest] = open;
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold text-ink">Conflicts</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        The agent never overwrites a belief it has contradicting evidence about. Pick the claim
-        that&apos;s true — the loser is forgotten (atomically, with provenance), the winner is
-        reinforced.
+    <PageShell
+      title="Conflicts"
+      subtitle="Cross-period conflicts — both claims, confidence, one-tap resolve"
+      annotation="GET /conflicts · POST /conflicts/:id/resolve"
+    >
+      <p className="mono-annot mb-5">
+        ◇ signature surface a4 · both claims shown side-by-side · the agent never silently
+        overwrites a belief
       </p>
 
-      {conflicts.isLoading && (
-        <div className="mt-6 space-y-3">
-          {[...Array(2)].map((_, i) => (
-            <div key={i} className="h-40 animate-pulse rounded-xl bg-slate-100" />
+      {conflicts.isLoading && <Skeleton className="h-80" />}
+      {conflicts.isError && <ErrorNote>Could not load conflicts.</ErrorNote>}
+      {conflicts.data && open.length === 0 && (
+        <EmptyState>No open conflicts — the books and the agent&apos;s beliefs agree.</EmptyState>
+      )}
+
+      <AnimatePresence mode="popLayout">
+        {top && (
+          <motion.div
+            key={top.id}
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 80, scale: 0.96, transition: { duration: 0.3 } }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <TopCard conflict={top} index={0} total={open.length} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {rest.length > 0 && (
+        <motion.div
+          className="mt-4 grid gap-3 md:grid-cols-2"
+          initial="initial"
+          animate="animate"
+          variants={{ animate: { transition: { staggerChildren: 0.06 } } }}
+        >
+          {rest.map((c, i) => (
+            <motion.div
+              key={c.id}
+              variants={{ initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 } }}
+              className="rounded-xl border border-line2 bg-card/70 px-5 py-4 shadow-card"
+            >
+              <p className="text-sm font-bold text-ink">
+                {c.engine_view.counterparty ?? c.scope_key} · {c.claim_kind.replace(/_/g, " ")}
+              </p>
+              <p className="mono-annot mt-1">{i === 0 ? "up next" : "queued"}</p>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
-      {conflicts.isError && (
-        <p className="mt-6 text-sm text-red-600">Could not load conflicts.</p>
-      )}
-      {conflicts.data && conflicts.data.length === 0 && (
-        <div className="mt-6 rounded-xl border border-dashed bg-white p-10 text-center text-sm text-slate-500">
-          No open conflicts — the books and the agent&apos;s beliefs agree.
-        </div>
-      )}
-      {conflicts.data && conflicts.data.length > 0 && (
-        <ul className="mt-6 space-y-3">
-          {conflicts.data.map((c) => (
-            <Card key={c.id} conflict={c} />
-          ))}
-        </ul>
-      )}
-    </div>
+    </PageShell>
   );
 }

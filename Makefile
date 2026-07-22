@@ -1,6 +1,12 @@
-.PHONY: up down dev seed lint test test-int contracts smoke logs
+.PHONY: up down dev dev-up dev-down seed lint test test-int contracts smoke logs
 
 # ----- stack -------------------------------------------------------------
+dev-up:        ## working local stack (docker datastores + host venv services) — use this, `up` images are broken
+	./scripts/dev_up.sh
+
+dev-down:      ## stop everything dev-up started
+	./scripts/dev_down.sh
+
 up:            ## full dev stack (app + memory). Override ports via docker-compose.override.yml
 	docker compose -f docker-compose.yml -f memory/docker-compose.yml $(if $(wildcard docker-compose.override.yml),-f docker-compose.override.yml,) up -d --build
 

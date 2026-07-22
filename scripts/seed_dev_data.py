@@ -103,6 +103,27 @@ async def ensure_identity(session) -> str:
     return tenant.id
 
 
+SECOND_TENANT = "Meridian Textiles Co"
+
+
+async def ensure_second_tenant(session) -> str | None:
+    """A second client tenant on the same login — makes the CA roster and the
+    explicit tenant-switch flow demoable (one CA, many clients)."""
+    users = UserRepo(session)
+    user = await users.by_email(DEMO_EMAIL)
+    if user is None:
+        return None
+    memberships = await users.memberships(user.id)
+    if len(memberships) > 1:
+        return memberships[1].tenant_id
+    tenant = Tenant(id=uuid7(), name=SECOND_TENANT, plan="startup")
+    session.add(tenant)
+    await session.flush()
+    session.add(Membership(user_id=user.id, tenant_id=tenant.id, role="ca"))
+    print(f"seeded second tenant {SECOND_TENANT!r} (role ca) for {DEMO_EMAIL}")
+    return tenant.id
+
+
 async def ensure_books(session, tenant_id: str) -> None:
     count = await session.scalar(
         select(func.count()).select_from(Counterparty).where(Counterparty.tenant_id == tenant_id)
@@ -243,6 +264,10 @@ async def main() -> None:
         await ensure_late_invoices(session, tenant_id)
         await ensure_chart(session, tenant_id)
         await ensure_contacts(session, tenant_id)
+        second_id = await ensure_second_tenant(session)
+        if second_id:
+            await session.flush()
+            await ensure_chart(session, second_id)  # empty books, real chart
     await dispose_engine()
 
 

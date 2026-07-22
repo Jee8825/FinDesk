@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Redis streams / channels (shapes in contracts/events.md)
     jobs_stream_interactive: str = "agents:interactive"
+    jobs_consumer_group: str = "workers"  # must mirror agents config
     events_stream: str = "agents:events"
     events_consumer_group: str = "backend"
     run_channel_prefix: str = "run:"

@@ -1,6 +1,9 @@
 "use client";
-// B5's shared surface — rendered identically for the owner and (read-only)
-// for a lender holding a share link.
+// B5's shared surface — rendered identically for the owner (dark surface) and
+// (read-only) for a lender holding a share link (light surface).
+import { motion } from "framer-motion";
+
+import { AnimatedNumber, Card, MonoLabel, Pill, useSurface, stagger } from "@/components/ui";
 import { formatINR, type DataRoom } from "@/lib/api";
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -13,98 +16,133 @@ const COMPONENT_LABELS: Record<string, string> = {
 };
 
 function ScoreDial({ score }: { score: number }) {
+  const dark = useSurface() === "dark";
   const r = 54;
   const c = 2 * Math.PI * r;
   const filled = (score / 100) * c;
+  const track = dark ? "#2e2c28" : "#e2dccd";
+  const fill = score >= 75 ? (dark ? "#9fd2c0" : "#3f7d4e") : score >= 50 ? "#e8a868" : "#e8a3a0";
   return (
-    <svg viewBox="0 0 140 140" className="h-36 w-36" role="img" aria-label={`FinDesk score ${score}`}>
-      <circle cx="70" cy="70" r={r} fill="none" stroke="#e2e8f0" strokeWidth="12" />
-      <circle
+    <svg viewBox="0 0 140 140" className="h-40 w-40" role="img" aria-label={`FinDesk score ${score}`}>
+      <circle cx="70" cy="70" r={r} fill="none" stroke={track} strokeWidth="12" />
+      <motion.circle
         cx="70"
         cy="70"
         r={r}
         fill="none"
-        stroke="#0e6e74"
+        stroke={fill}
         strokeWidth="12"
-        strokeDasharray={`${filled} ${c - filled}`}
         strokeLinecap="round"
+        strokeDasharray={c}
         transform="rotate(-90 70 70)"
+        initial={{ strokeDashoffset: c }}
+        animate={{ strokeDashoffset: c - filled }}
+        transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
       />
-      <text x="70" y="66" textAnchor="middle" fontSize="30" fontWeight="700" fill="#0b1f33">
+      <text
+        x="70"
+        y="70"
+        textAnchor="middle"
+        fontSize="34"
+        fontWeight="700"
+        fill={dark ? "#f0eee8" : "#26241f"}
+        fontFamily="var(--font-plex-mono)"
+      >
         {score}
       </text>
-      <text x="70" y="86" textAnchor="middle" fontSize="10" fill="#64748b">
-        FinDesk Score
+      <text x="70" y="90" textAnchor="middle" fontSize="10" fill={dark ? "#7d7a72" : "#9b968a"} fontFamily="var(--font-plex-mono)">
+        / 100
       </text>
     </svg>
   );
 }
 
 export function DataRoomView({ room }: { room: DataRoom }) {
+  const dark = useSurface() === "dark";
   const ev = room.evidence;
+  const score = room.findesk_score.score;
+  const verdict = score >= 75 ? "Credit-ready" : score >= 50 ? "Getting there" : "Needs work";
+
   return (
-    <div>
-      <section className="flex items-center gap-8 rounded-xl border bg-white p-6 shadow-sm">
-        <ScoreDial score={room.findesk_score.score} />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                room.audit_chain.ok
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-red-50 text-red-700"
-              }`}
-            >
-              {room.audit_chain.ok
-                ? `⛓ audit chain verified — ${room.audit_chain.rows} events`
-                : "⚠ audit chain BROKEN"}
-            </span>
-          </div>
-          <div className="mt-3 space-y-1.5">
-            {Object.entries(room.findesk_score.components).map(([key, c]) => (
-              <div key={key} className="flex items-center gap-2 text-xs">
-                <span className="w-44 text-slate-500">{COMPONENT_LABELS[key] ?? key}</span>
-                <div className="h-1.5 flex-1 rounded bg-slate-100">
-                  <div
-                    className="h-1.5 rounded bg-teal-brand"
-                    style={{ width: `${c.ratio * 100}%` }}
+    <div className="grid items-start gap-5 lg:grid-cols-[280px_1fr]">
+      <Card className="flex flex-col items-center p-7 text-center">
+        <MonoLabel>findesk score</MonoLabel>
+        <div className="mt-3">
+          <ScoreDial score={score} />
+        </div>
+        <p className={`mt-2 text-lg font-bold ${dark ? "text-mint" : "text-moss"}`}>{verdict}</p>
+        <p className={`mt-1 text-xs leading-relaxed ${dark ? "text-dark-mute" : "text-faint"}`}>
+          Books reconciled, clean provenance, verifiable audit chain.
+        </p>
+        <div className="mt-4">
+          <Pill tone={room.audit_chain.ok ? "good" : "bad"}>
+            {room.audit_chain.ok ? `⛓ chain verified · ${room.audit_chain.rows} events` : "⚠ audit chain broken"}
+          </Pill>
+        </div>
+      </Card>
+
+      <div className="space-y-5">
+        <Card className="p-6">
+          <h3 className={`text-[15px] font-bold ${dark ? "text-dark-text" : "text-ink"}`}>Score factors</h3>
+          <div className="mt-4 space-y-3.5">
+            {Object.entries(room.findesk_score.components).map(([key, c], i) => (
+              <div key={key}>
+                <div className="flex items-center justify-between text-[13px]">
+                  <span className={dark ? "text-dark-text/90" : "text-mute"}>
+                    {COMPONENT_LABELS[key] ?? key}
+                  </span>
+                  <span className={`font-mono font-semibold ${dark ? "text-dark-text" : "text-ink"}`}>
+                    {c.points}/{c.weight}
+                  </span>
+                </div>
+                <div className={`mt-1.5 h-1.5 w-full overflow-hidden rounded-full ${dark ? "bg-dark-line" : "bg-line2"}`}>
+                  <motion.div
+                    className={`h-full rounded-full ${c.ratio >= 0.75 ? (dark ? "bg-mint" : "bg-moss") : "bg-accent-soft"}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${c.ratio * 100}%` }}
+                    transition={{ duration: 0.9, delay: 0.08 * i, ease: [0.22, 1, 0.36, 1] }}
                   />
                 </div>
-                <span className="w-16 text-right font-mono text-slate-600">
-                  {c.points}/{c.weight}
-                </span>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </Card>
 
-      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {[
-          ["Bank transactions", ev.bank_transactions],
-          ["Auto-matched & posted", ev.committed_matches],
-          ["TDS-adjusted settlements", ev.tds_adjusted_matches],
-          ["Debits categorized", ev.debits_categorized],
-          ["Conflicts resolved", ev.conflicts_resolved],
-          ["Audit events (hash-chained)", ev.audit_events],
-        ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-xl border bg-white p-4 shadow-sm">
-            <p className="text-xs uppercase text-slate-400">{label}</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-ink">{String(value)}</p>
-          </div>
-        ))}
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase text-slate-400">Open receivables</p>
-          <p className="mt-1 font-mono text-lg font-semibold text-ink">
-            {formatINR(Number(ev.open_receivables_paise ?? 0))}
-          </p>
-          <p className="text-xs text-slate-400">
-            of which overdue {formatINR(Number(ev.overdue_receivables_paise ?? 0))}
-          </p>
-        </div>
-      </section>
+        <motion.div className="grid grid-cols-2 gap-3 sm:grid-cols-3" initial="initial" animate="animate" variants={stagger}>
+          {(
+            [
+              ["Bank transactions", ev.bank_transactions],
+              ["Auto-matched & posted", ev.committed_matches],
+              ["TDS-adjusted settlements", ev.tds_adjusted_matches],
+              ["Debits categorized", ev.debits_categorized],
+              ["Conflicts resolved", ev.conflicts_resolved],
+              ["Audit events (chained)", ev.audit_events],
+            ] as const
+          ).map(([label, value]) => (
+            <Card key={label} hover className="p-4">
+              <MonoLabel>{label}</MonoLabel>
+              <div className={`mt-1.5 font-mono text-lg font-bold ${dark ? "text-dark-text" : "text-ink"}`}>
+                {typeof value === "number" ? (
+                  <AnimatedNumber value={value} format={(n) => String(Math.round(n))} />
+                ) : (
+                  <span>{value ?? "—"}</span>
+                )}
+              </div>
+            </Card>
+          ))}
+          <Card hover className="p-4">
+            <MonoLabel>open receivables</MonoLabel>
+            <div className={`mt-1.5 font-mono text-lg font-bold ${dark ? "text-dark-text" : "text-ink"}`}>
+              {formatINR(Number(ev.open_receivables_paise ?? 0))}
+            </div>
+            <p className={`mt-0.5 text-[11px] ${dark ? "text-dark-mute" : "text-faint"}`}>
+              overdue {formatINR(Number(ev.overdue_receivables_paise ?? 0))}
+            </p>
+          </Card>
+        </motion.div>
 
-      <p className="mt-4 text-xs text-slate-400">{room.methodology_note}</p>
+        <p className="mono-annot">{room.methodology_note}</p>
+      </div>
     </div>
   );
 }
