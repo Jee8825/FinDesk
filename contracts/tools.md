@@ -16,10 +16,23 @@ additionally require a valid single-use `approval_token`.
 - `pull_transactions(consent_id, from, to) → { transactions: [NormalizedTxn] }`
 
 ## tally@v1 / zoho_books@v1 (mirrored surface)
+
+Tally transport: TallyPrime HTTP-XML gateway (`http://<host>:9000`), Export
+envelopes; responses normalized to the shapes below. Fixture-tested — no live
+calls in CI. `list_invoices` reads Bills Receivable (Sundry Debtors),
+`list_bills` reads Bills Payable (Sundry Creditors).
+
 - `list_invoices(from, to, status?) → { invoices: [InvoiceRef] }`
 - `list_bills(from, to, status?) → { bills: [BillRef] }`
-- `get_chart_of_accounts() → { accounts: [{ code, name, type }] }`
+- `get_chart_of_accounts() → { accounts: [Account] }`
 - `push_voucher(VoucherDraft) → { external_id }`  ⚠ (writes to the books of record)
+- `InvoiceRef / BillRef: { external_ref, party, bill_date, due_date?, amount_paise, outstanding_paise, source }`
+  (amounts normalized positive; Tally's debit-negative sign convention is
+  absorbed at the tool boundary; overdue/interest math is backend business
+  logic, never computed here)
+- `Account: { code, name, type }` — `type` is the Tally parent group verbatim
+  (e.g. "Sundry Debtors"); `code` is the Tally GUID or name-derived ref
+- `VoucherDraft: { voucher_type, date, narration, ledger_entries: [{ ledger, amount_paise, direction: cr|dr }] }`
 
 ## gst_portal@v1
 - `pull_gstr2b(period) → { lines: [ITCLine] }`
