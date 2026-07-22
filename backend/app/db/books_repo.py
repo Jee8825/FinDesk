@@ -12,6 +12,7 @@ from app.db.models import (
     AuditLog,
     BankAccount,
     BankTransaction,
+    Bill,
     ChartAccount,
     Counterparty,
     Document,
@@ -170,6 +171,14 @@ class BooksRepo:
         return list(
             await self.session.scalars(
                 select(Invoice).where(Invoice.tenant_id == tenant_id, Invoice.status == "open")
+            )
+        )
+
+    # ---- bills (payables) --------------------------------------------------
+    async def open_bills(self, tenant_id: str) -> list[Bill]:
+        return list(
+            await self.session.scalars(
+                select(Bill).where(Bill.tenant_id == tenant_id, Bill.status == "open")
             )
         )
 

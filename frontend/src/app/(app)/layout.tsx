@@ -196,6 +196,10 @@ function Sidebar() {
       ],
     },
     {
+      label: "Payables",
+      items: [{ href: "/payables", label: "Payables Shield" }],
+    },
+    {
       label: "Cash command",
       items: [
         { href: "/forecast", label: "Forecast" },

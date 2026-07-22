@@ -151,6 +151,24 @@ class Invoice(TimestampedTenanted, Base):
     )
 
 
+class Bill(TimestampedTenanted, Base):
+    """A payable we owe a vendor — the 43B(h)/§15 buyer-side mirror of Invoice."""
+
+    __tablename__ = "bills"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    counterparty_id: Mapped[str] = mapped_column(ForeignKey("counterparties.id"), index=True)
+    number: Mapped[str] = mapped_column(String(50))
+    issue_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_paise: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|paid
+    # MSME Act day-zero; falls back to issue_date when not recorded
+    acceptance_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class Match(TimestampedTenanted, Base):
     __tablename__ = "matches"
 

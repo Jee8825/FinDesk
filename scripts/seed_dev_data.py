@@ -28,6 +28,7 @@ from app.auth.security import hash_password  # noqa: E402
 from app.db import dispose_engine, session_scope  # noqa: E402
 from app.db.models import (  # noqa: E402
     BankAccount,
+    Bill,
     ChartAccount,
     Counterparty,
     Invoice,
@@ -52,6 +53,23 @@ CLIENTS = [
     "Devans South Traders",
 ]
 VENDORS = ["AWS India", "WeWork BKC"]
+
+# Buyer-side 43B(h) demo: registered-MSE vendors whose open bills run the §15
+# clock against *us*. (name, msme_status)
+MSE_VENDORS = [
+    ("Sundaram Packaging", "micro"),
+    ("Kaveri Print Works", "small"),
+]
+
+# (vendor, number, amount_paise, issue_date) — §15 clock runs from issue
+# (acceptance defaults to issue). Dates crafted for the three bands:
+# breached (>45d), closing (<7d left), within (fresh).
+BILLS = [
+    ("Sundaram Packaging", "PB-2026-889", 5_230_000, "2026-05-20"),  # breached
+    ("Kaveri Print Works", "PB-2026-014", 2_140_000, "2026-06-10"),  # closing
+    ("Sundaram Packaging", "PB-2026-902", 7_800_000, "2026-07-10"),  # within
+    ("AWS India", "PB-2026-777", 1_650_000, "2026-07-01"),  # non-MSE — excluded
+]
 
 # (client, number, amount_paise, issue_date) — due = issue + 30d.
 # Amounts pair with scripts/fixtures/statement_apr2026.csv (see module docstring).
@@ -223,6 +241,49 @@ async def ensure_chart(session, tenant_id: str) -> None:
     print(f"seeded {len(CHART_OF_ACCOUNTS)} chart-of-accounts entries")
 
 
+async def ensure_bills(session, tenant_id: str) -> None:
+    """Idempotently add MSE vendors + open payable bills (43B(h) demo)."""
+    parties = {
+        c.name: c
+        for c in (
+            await session.scalars(
+                select(Counterparty).where(Counterparty.tenant_id == tenant_id)
+            )
+        )
+    }
+    for name, msme_status in MSE_VENDORS:
+        if name in parties:
+            if parties[name].msme_status != msme_status:
+                parties[name].msme_status = msme_status
+            continue
+        vendor = Counterparty(
+            id=uuid7(), tenant_id=tenant_id, kind="vendor", name=name, msme_status=msme_status
+        )
+        session.add(vendor)
+        parties[name] = vendor
+    await session.flush()
+    for vendor_name, number, amount_paise, issue in BILLS:
+        exists = await session.scalar(
+            select(Bill).where(Bill.tenant_id == tenant_id, Bill.number == number)
+        )
+        if exists is not None or vendor_name not in parties:
+            continue
+        issue_dt = datetime.fromisoformat(issue).replace(tzinfo=UTC)
+        session.add(
+            Bill(
+                id=uuid7(),
+                tenant_id=tenant_id,
+                counterparty_id=parties[vendor_name].id,
+                number=number,
+                issue_date=issue_dt,
+                due_date=issue_dt + timedelta(days=45),
+                amount_paise=amount_paise,
+                status="open",
+            )
+        )
+        print(f"seeded bill {number}")
+
+
 async def ensure_late_invoices(session, tenant_id: str) -> None:
     """Idempotently add invoices introduced after the initial books seed."""
     parties = {
@@ -262,6 +323,7 @@ async def main() -> None:
         await ensure_books(session, tenant_id)
         await session.flush()
         await ensure_late_invoices(session, tenant_id)
+        await ensure_bills(session, tenant_id)
         await ensure_chart(session, tenant_id)
         await ensure_contacts(session, tenant_id)
         second_id = await ensure_second_tenant(session)

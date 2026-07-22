@@ -7,8 +7,9 @@
 > (chart_of_accounts + transaction categorization) `0006` (anomaly cards) `0007`
 > (invoice acceptance dates + statutory clocks) `0008` (versioned
 > forecasts + lines) `0009` (working-capital actions) `0010`
-> (enforcer last_enforced_level) and `0011` (hot-path indexes + partial
-> unique committed-match guard) are live. Tables carry the subset of
+> (enforcer last_enforced_level) `0011` (hot-path indexes + partial
+> unique committed-match guard) and `0012` (bills — buyer-side payables for
+> §15/43B(h) compliance, mirroring invoices) are live. Tables carry the subset of
 > columns their shipped features need (e.g. `invoices` gains gst/tds/irn in
 > Phase 3); this file describes the target shape.
 

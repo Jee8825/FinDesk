@@ -258,6 +258,38 @@ export type RadarOut = {
   ca_note: string;
 };
 
+export type PayableItem = {
+  bill_id: string;
+  bill_number: string;
+  vendor: string;
+  msme_status: string;
+  amount_paise: number;
+  clock: {
+    statutory_due_date: string;
+    day_count: number;
+    days_left: number;
+    overdue_days: number;
+    band: "within" | "closing" | "breached";
+    interest_owed_paise: number;
+    annual_rate_bps: number;
+    disallowance_risk_paise: number;
+    fy_end: string;
+  };
+};
+
+export type PayablesOut = {
+  items: PayableItem[];
+  totals: {
+    open_mse_paise: number;
+    breached_paise: number;
+    closing_window_paise: number;
+    interest_owed_paise: number;
+    disallowance_risk_paise: number;
+  };
+  non_mse_open_count: number;
+  ca_note: string;
+};
+
 export type ForecastWeek = {
   week: number;
   week_start: string;
@@ -348,6 +380,7 @@ export const api = {
     extra_monthly_outflow_paise?: number;
   }) => request<WhatifOut>("POST", apiPaths.POST_FORECAST_WHATIF, params),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
+  payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",

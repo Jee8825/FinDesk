@@ -29,6 +29,7 @@ const PAGES: Array<{ href: string; label: string; hint: string }> = [
   { href: "/anomalies", label: "Anomalies", hint: "duplicates, overcharges" },
   { href: "/approvals", label: "Approvals", hint: "the control surface" },
   { href: "/receivables", label: "45-Day Radar", hint: "MSME clocks, interest" },
+  { href: "/payables", label: "Payables Shield", hint: "43B(h) exposure, §15 clock" },
   { href: "/collections", label: "Collections", hint: "chase drafts" },
   { href: "/forecast", label: "Forecast", hint: "13-week scenarios" },
   { href: "/actions", label: "WC Actions", hint: "working-capital options" },

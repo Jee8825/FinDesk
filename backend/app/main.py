@@ -16,6 +16,7 @@ from app.api.routes_conflicts import router as conflicts_router
 from app.api.routes_dataroom import router as dataroom_router
 from app.api.routes_forecast import router as forecast_router
 from app.api.routes_internal import router as internal_router
+from app.api.routes_payables import router as payables_router
 from app.api.routes_radar import router as radar_router
 from app.api.routes_reports import router as reports_router
 from app.api.routes_wc_actions import router as wc_actions_router
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(anomalies_router, prefix=prefix)
     app.include_router(reports_router, prefix=prefix)
     app.include_router(radar_router, prefix=prefix)
+    app.include_router(payables_router, prefix=prefix)
     app.include_router(forecast_router, prefix=prefix)
     app.include_router(wc_actions_router, prefix=prefix)
     app.include_router(dataroom_router, prefix=prefix)

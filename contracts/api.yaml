@@ -118,6 +118,8 @@ paths:
       responses: { "200": { description: adjusted weeks + gap } }
   /receivables/radar:
     get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
+  /payables/compliance:
+    get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, 43B(h) disallowance exposure per open bill", responses: { "200": { description: compliance } } }
   /wc-actions:
     get: { tags: [cash], summary: Ranked working-capital options, responses: { "200": { description: page } } }
   /wc-actions/{action_id}/request:
