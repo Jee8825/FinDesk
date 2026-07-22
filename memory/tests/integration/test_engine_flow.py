@@ -97,3 +97,104 @@ async def test_retrieval_reinforces_strength(schema):
         unit = await repository.get_memory(s, mid)
         assert unit is not None
         assert unit.retrieval_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_corroboration_count_accumulates_with_diminishing_returns(schema):
+    """Repeated corroboration must raise confidence by *less* each time, which
+    only works if corroboration_count carries forward across resolutions."""
+    from recall.core import repository
+    from recall.db import session_scope
+
+    llm = FakeLLM()
+    engine = _engine(llm)
+    ts = "User primary backend language is TypeScript"
+
+    # Initial belief (low confidence so increments don't clamp at 1.0).
+    llm.queue_facts([ExtractedFact(content="User primary backend language is Python",
+                                   tier="semantic", confidence=0.5, cluster="coding-preferences")])
+    await engine.ingest(IngestRequest(user_id="u3", session_id="s1",
+                                      content="python", scope="private"))
+
+    # First corroboration: the FakeLLM resolves every conflict to `ts`.
+    llm.queue_facts([ExtractedFact(content=ts, tier="semantic", confidence=0.5,
+                                   cluster="coding-preferences")])
+    r2 = await engine.ingest(IngestRequest(user_id="u3", session_id="s2",
+                                           content="typescript", scope="private"))
+    async with session_scope() as s:
+        u2 = await repository.get_memory(s, r2.units[0].id)
+    assert u2.corroboration_count == 1
+    delta_first = u2.confidence - 0.5
+
+    # Second corroboration of the same belief.
+    llm.queue_facts([ExtractedFact(content=ts, tier="semantic", confidence=0.5,
+                                   cluster="coding-preferences")])
+    r3 = await engine.ingest(IngestRequest(user_id="u3", session_id="s3",
+                                           content="typescript", scope="private"))
+    async with session_scope() as s:
+        u3 = await repository.get_memory(s, r3.units[0].id)
+    assert u3.corroboration_count == 2
+    delta_second = u3.confidence - u2.confidence
+
+    # The hallmark of diminishing returns: the second bump is smaller.
+    assert 0 < delta_second < delta_first
+
+
+@pytest.mark.asyncio
+async def test_dormancy_drifts_confidence_down_on_consolidation(schema):
+    """Beliefs the user hasn't recalled across several later sessions drift down."""
+    from recall.core import repository
+    from recall.db import session_scope
+
+    llm = FakeLLM()
+    engine = _engine(llm)
+
+    # Three beliefs with disjoint vocabulary (no conflicts), each in its own
+    # session so the dormancy counter sees later sessions for the oldest belief.
+    llm.queue_facts([ExtractedFact(content="alpha apple", tier="semantic", confidence=0.6)])
+    r1 = await engine.ingest(IngestRequest(user_id="u4", session_id="s1", content="alpha"))
+    llm.queue_facts([ExtractedFact(content="bravo banana", tier="semantic", confidence=0.6)])
+    await engine.ingest(IngestRequest(user_id="u4", session_id="s2", content="bravo"))
+    llm.queue_facts([ExtractedFact(content="charlie cherry", tier="semantic", confidence=0.6)])
+    await engine.ingest(IngestRequest(user_id="u4", session_id="s3", content="charlie"))
+
+    report = await engine.consolidate("u4")
+    assert report["dormant_drifted"] >= 1
+
+    async with session_scope() as s:
+        oldest = await repository.get_memory(s, r1.units[0].id)
+    assert oldest.confidence < 0.6
+
+
+@pytest.mark.asyncio
+async def test_why_delete_promote_are_tenant_scoped(schema):
+    """A memory UUID alone must not expose, delete, or re-scope across tenants."""
+    from recall.core import repository
+    from recall.core.scoping import ScopeError
+    from recall.db import session_scope
+
+    llm = FakeLLM()
+    engine = _engine(llm)
+    llm.queue_facts([ExtractedFact(content="Tenant one secret preference",
+                                   tier="semantic", confidence=0.9)])
+    r = await engine.ingest(IngestRequest(user_id="u5", session_id="s1",
+                                          content="secret", tenant_id="t1"))
+    mid = r.units[0].id
+
+    # why: another tenant gets an empty chain; the owning tenant gets evidence.
+    assert (await engine.why(mid, tenant_id="t2")).evidence == []
+    assert (await engine.why(mid, tenant_id="t1")).evidence
+
+    # promote: cross-tenant is denied.
+    with pytest.raises(ScopeError):
+        await engine.promote(mid, "private", None, tenant_id="t2")
+
+    # delete: cross-tenant is a no-op; the row survives.
+    deleted, _ = await engine.delete(mid, tenant_id="t2")
+    assert deleted is False
+    async with session_scope() as s:
+        assert await repository.get_memory(s, mid) is not None
+
+    # delete: the owning tenant succeeds.
+    deleted, _ = await engine.delete(mid, tenant_id="t1")
+    assert deleted is True

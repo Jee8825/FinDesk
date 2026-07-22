@@ -97,10 +97,35 @@ async def retrieve_units(
         return {}
 
 
-async def delete_memory(memory_id: str) -> bool:
+async def ping() -> bool:
+    """Is the memory engine reachable? (short timeout, never raises)"""
+    try:
+        resp = await _client().get("/health", timeout=1.5)
+        return resp.status_code == 200
+    except (httpx.HTTPError, OSError):
+        return False
+
+
+async def why_chain(*, tenant_id: str, memory_id: str) -> dict[str, Any] | None:
+    """Provenance chain for one belief (GET /memory/{id}/why); None if unavailable."""
     try:
         async with MEMORY_CONCURRENCY:
-            resp = await _client().delete(f"/memory/{memory_id}")
+            resp = await _client().get(
+                f"/memory/{memory_id}/why", params={"tenant_id": tenant_id}
+            )
+        resp.raise_for_status()
+        return resp.json()
+    except (httpx.HTTPError, OSError) as exc:
+        log.warning("memory why unavailable (%s)", exc)
+        return None
+
+
+async def delete_memory(*, tenant_id: str, memory_id: str) -> bool:
+    try:
+        async with MEMORY_CONCURRENCY:
+            resp = await _client().delete(
+                f"/memory/{memory_id}", params={"tenant_id": tenant_id, "cascade": True}
+            )
         resp.raise_for_status()
         return True
     except (httpx.HTTPError, OSError) as exc:

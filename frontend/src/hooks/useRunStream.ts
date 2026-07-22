@@ -3,7 +3,7 @@
 // Authorization header). Event shapes: contracts/events.md.
 import { useEffect, useRef, useState } from "react";
 
-import { api, getToken } from "@/lib/api";
+import { api, authorizedFetch } from "@/lib/api";
 
 export type RunEvent = {
   event: string;
@@ -28,8 +28,7 @@ export function useRunStream(runId: string | null) {
 
     (async () => {
       try {
-        const res = await fetch(api.streamPath(runId), {
-          headers: { Authorization: `Bearer ${getToken()}` },
+        const res = await authorizedFetch(api.streamPath(runId), {
           signal: controller.signal,
         });
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);

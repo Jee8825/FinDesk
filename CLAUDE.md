@@ -85,3 +85,27 @@ talk to other layers only through `contracts/`, never edit another layer's
 internals to "make it work" — open an issue or change the contract with the
 owner. Update this file (and your layer's CLAUDE.md) in the Friday sync; treat
 it like production code.
+
+## Memory & Context Protocol
+
+Persistent memory lives in `knowledge/` (Obsidian vault, indexed by the
+`basic-memory` MCP server registered in `.mcp.json`, project `findesk`) and in
+the `graphify` knowledge graph (`graphify-out/`). The loop every session:
+
+1. **Recall first.** Before exploring code, query what we already know:
+   `graphify query "<question>"` for architecture/code questions, and the
+   basic-memory MCP (`search_notes` / `build_context`) or
+   `knowledge/00-INDEX.md` for decisions, conventions, and gotchas.
+2. **context7 first for external libraries.** Any question about an external
+   lib/API/version (Next.js, FastAPI, SQLAlchemy, framer-motion, …) goes to
+   the context7 MCP before web search or guessing from memory.
+3. **Write-through.** When you learn a durable fact (a decision, a broken
+   path, a port remap, a contract shape), persist it immediately: update the
+   right note under `knowledge/` (or `write_note` via MCP). Don't hoard it in
+   the conversation.
+4. **Close the session** with a dated log in `knowledge/sessions/` (template:
+   `knowledge/templates/session-log.md`).
+
+SessionStart/SessionEnd hooks in `.claude/settings.json` automate injection
+and refresh (`scripts/memory/`). Never write secrets into the vault, scripts,
+or any committed file — read keys from the environment at runtime.

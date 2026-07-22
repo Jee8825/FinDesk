@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.auth.deps import Auth
 from app.db import session_scope
 from app.services.approvals import ToolExecutionError, decide_approval, list_approvals
+from app.services.forecast_trigger import trigger_forecast_recompute
 
 router = APIRouter(tags=["approvals"])
 
@@ -70,4 +71,7 @@ async def decide(approval_id: str, body: DecideRequest, auth: Auth) -> dict[str,
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     if not result.get("ok"):
         raise HTTPException(status.HTTP_409_CONFLICT, result.get("reason", "cannot decide"))
+    if result.get("execution", {}).get("committed"):
+        # human-approved commit changed the ledger — recompute the forecast
+        await trigger_forecast_recompute(tenant_id=auth.tenant_id, requested_by=auth.user_id)
     return result

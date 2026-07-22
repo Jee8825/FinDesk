@@ -3,5 +3,30 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-paper text-ink antialiased;
+}
+
+@layer components {
+  /* uppercase mono micro-label — the system's annotation voice */
+  .mono-label {
+    @apply font-mono text-[10px] uppercase tracking-[0.14em];
+  }
+  .mono-annot {
+    @apply font-mono text-[11px] text-annot;
+  }
+}
+
+/* warm, quiet scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccc7bb;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

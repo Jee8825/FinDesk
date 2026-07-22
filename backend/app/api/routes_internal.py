@@ -18,6 +18,8 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.db import session_scope
 from app.db.books_repo import BooksRepo
+from app.db.repositories import RunRepo
+from app.services.forecast_trigger import trigger_forecast_recompute
 from app.services.recon import route_proposal
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -769,8 +771,15 @@ async def commit_matches(
                     session, tenant_id=body.tenant_id, run_id=body.run_id, proposal=proposal
                 )
             )
+        source_run = await RunRepo(session).by_id(body.run_id, body.tenant_id)
+    committed = sum(1 for r in results if r["committed"])
+    if committed and source_run is not None:
+        # ledger changed — keep the forecast promise ("recomputed on ledger events")
+        await trigger_forecast_recompute(
+            tenant_id=body.tenant_id, requested_by=source_run.requested_by
+        )
     return CommitOut(
         results=results,
-        committed=sum(1 for r in results if r["committed"]),
+        committed=committed,
         queued=sum(1 for r in results if r.get("queued")),
     )

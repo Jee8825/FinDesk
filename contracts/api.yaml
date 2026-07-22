@@ -42,6 +42,7 @@ paths:
   /me:
     get: { tags: [auth], summary: Current user + memberships, responses: { "200": { description: profile } } }
   /tenants/{tenant_id}/switch:
+    parameters: [{ name: tenant_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [auth], summary: Switch active tenant (CA console), responses: { "200": { description: new token } } }
 
   /books/transactions:
@@ -58,6 +59,7 @@ paths:
   /books/chart-of-accounts:
     get: { tags: [books], summary: Tenant chart of accounts, responses: { "200": { description: accounts } } }
   /books/transactions/{txn_id}/category:
+    parameters: [{ name: txn_id, in: path, required: true, schema: { type: string } }]
     patch:
       tags: [books]
       summary: Human category correction — also writes a vendor_category memory claim
@@ -69,28 +71,39 @@ paths:
     post: { tags: [agent], summary: Start a graph run (kind + params) → run_id, responses: { "202": { description: queued } } }
     get: { tags: [agent], summary: List runs, responses: { "200": { description: page } } }
   /agent/runs/{run_id}:
+    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
     get: { tags: [agent], summary: Run status + steps, responses: { "200": { description: run } } }
   /agent/runs/{run_id}/stream:
+    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
     get:
       tags: [agent]
       summary: SSE stream of run events (shapes in contracts/events.md)
       responses: { "200": { description: text/event-stream } }
   /agent/runs/{run_id}/cancel:
+    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [agent], summary: Cancel a run, responses: { "200": { description: cancelled } } }
+  /agent/health:
+    get:
+      tags: [agent]
+      summary: Live subsystem health — worker consumer liveness + memory-engine reachability
+      responses: { "200": { description: "{worker: bool, memory: bool}" } }
 
   /conflicts:
     get: { tags: [conflicts], summary: Conflict cards (filter by status), responses: { "200": { description: page } } }
   /conflicts/{conflict_id}/resolve:
+    parameters: [{ name: conflict_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [conflicts], summary: One-tap resolution (winning claim + rationale), responses: { "200": { description: resolved } } }
 
   /anomalies:
     get: { tags: [anomalies], summary: Anomaly cards, responses: { "200": { description: page } } }
   /anomalies/{anomaly_id}/decide:
+    parameters: [{ name: anomaly_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [anomalies], summary: accept | dismiss | mark recovered, responses: { "200": { description: updated } } }
 
   /approvals:
     get: { tags: [approvals], summary: Approval queue, responses: { "200": { description: page } } }
   /approvals/{approval_id}/decide:
+    parameters: [{ name: approval_id, in: path, required: true, schema: { type: string } }]
     post:
       tags: [approvals]
       summary: Approve/reject; on approve mints single-use action token and resumes the run
@@ -99,10 +112,11 @@ paths:
   /forecast:
     get: { tags: [cash], summary: Latest forecast (scenarios + lines + drivers), responses: { "200": { description: forecast } } }
   /receivables/radar:
-    get: { tags: [cash], summary: 45-day clocks, accrued interest, escalation states, responses: { "200": { description: radar } } }
+    get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
   /wc-actions:
     get: { tags: [cash], summary: Ranked working-capital options, responses: { "200": { description: page } } }
   /wc-actions/{action_id}/request:
+    parameters: [{ name: action_id, in: path, required: true, schema: { type: string } }]
     post:
       tags: [cash]
       summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
@@ -120,6 +134,7 @@ paths:
       responses: { "200": { description: room } }
 
   /why/{entity_type}/{entity_id}:
+    parameters: [{ name: entity_type, in: path, required: true, schema: { type: string } }, { name: entity_id, in: path, required: true, schema: { type: string } }]
     get:
       tags: [why]
       summary: Composed evidence chain (app provenance + memory why-chain)

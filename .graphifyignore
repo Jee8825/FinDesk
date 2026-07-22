@@ -1,0 +1,38 @@
+# graphify corpus curation — main-app source + knowledge vault only.
+# Vendored, generated, and doc-noise stay out of the graph.
+
+# vendored memory engine (own graphs/notes live in knowledge/)
+memory/
+
+# generated contract models — never hand-edited, pure noise in the graph
+shared/
+
+# editor/agent/tooling state
+.obsidian/
+.claude/
+.mcp.json
+.graphifyignore
+
+# infra + scripts (small, change rarely, pollute communities)
+infra/
+scripts/
+
+# docs: keep architecture deep-dives out of the code graph (indexed by
+# basic-memory instead via knowledge/); product PDF is binary noise
+docs/
+
+# generic doc-only files
+README.md
+**/README.md
+CHANGELOG.md
+LICENSE
+PROJECT_REPORT.md
+
+# build/test artifacts
+**/__pycache__/
+**/node_modules/
+**/.next/
+frontend/package-lock.json
+var/
+evals_out/
+graphify-out/

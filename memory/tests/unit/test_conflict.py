@@ -42,3 +42,15 @@ def test_find_nearest_returns_closest_within_threshold():
 def test_find_nearest_returns_none_when_all_far():
     result = conflict.find_nearest([1.0, 0.0], [_unit([0.0, 1.0])], threshold=0.25)
     assert result is None
+
+
+def test_find_nearest_skips_tombstoned_candidates():
+    # A belief retired earlier in the same ingest batch must not be matched.
+    new = [1.0, 0.0]
+    retired = _unit([0.99, 0.14])
+    retired.status = "tombstoned"
+    assert conflict.find_nearest(new, [retired], threshold=0.25) is None
+    # An active near belief is still matched.
+    active = _unit([0.99, 0.14])
+    active.status = "active"
+    assert conflict.find_nearest(new, [active], threshold=0.25) is not None

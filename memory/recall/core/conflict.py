@@ -62,6 +62,10 @@ def find_nearest(
     for unit in candidates:
         if unit.embedding is None:
             continue
+        # Skip beliefs already retired earlier in the same ingest batch — a
+        # tombstoned unit is no longer a live belief to conflict against.
+        if unit.status == "tombstoned":
+            continue
         dist = cosine_distance(new_embedding, list(unit.embedding))
         if dist <= threshold and (best is None or dist < best[1]):
             best = (unit, dist)

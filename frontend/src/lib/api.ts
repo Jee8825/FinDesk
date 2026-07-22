@@ -35,13 +35,54 @@ export function clearTokens() {
   window.localStorage.removeItem(REFRESH_KEY);
 }
 
+let refreshing: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  // Single-flight: concurrent 401s share one refresh call.
+  refreshing ??= (async () => {
+    const refresh = typeof window === "undefined" ? null : window.localStorage.getItem(REFRESH_KEY);
+    if (!refresh) return false;
+    const res = await fetch(`${API_PREFIX}${apiPaths.POST_AUTH_REFRESH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) return false;
+    setTokens((await res.json()) as TokenPair);
+    return true;
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+/** Fetch with Bearer auth and a single-flight refresh→retry on 401.
+ *  `url` is the full same-origin URL (API_PREFIX included). Every call that
+ *  talks to the API — JSON, multipart uploads, the SSE stream — goes through
+ *  here so token expiry never strands a request. */
+export async function authorizedFetch(
+  url: string,
+  init: RequestInit = {},
+  retried = false,
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers });
+  if (res.status === 401 && !retried && url !== `${API_PREFIX}${apiPaths.POST_AUTH_LOGIN}`) {
+    if (await tryRefresh()) return authorizedFetch(url, init, true);
+    clearTokens();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
+  return res;
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_PREFIX}${path}`, {
+  const res = await authorizedFetch(`${API_PREFIX}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-    },
+    headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
@@ -68,6 +109,17 @@ export type TxnPage = {
 };
 
 export type ChartAccount = { code: string; name: string; type: string };
+
+// Compact Indian notation for hero figures: ₹86.4L / ₹2.3Cr / ₹12,300
+export function formatINRCompact(amountPaise: number): string {
+  const rupees = amountPaise / 100;
+  const abs = Math.abs(rupees);
+  const sign = rupees < 0 ? "−" : "";
+  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(1)}k`;
+  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
+}
 
 export function formatINR(amountPaise: number): string {
   const rupees = amountPaise / 100;
@@ -175,6 +227,14 @@ export type WhyEvent = {
   row_hash: string;
 };
 
+export type MemoryBelief = {
+  memory_id: string;
+  scope_key: string;
+  content: string;
+  confidence: number | null;
+  explanation: string;
+};
+
 export type RadarItem = {
   invoice_id: string;
   invoice_number: string;
@@ -280,14 +340,16 @@ export const api = {
       `${apiPaths.GET_REPORTS_MONTH_END}?period=${period}`,
     ),
   why: (kind: string, id: string) =>
-    request<{ entity_ref: string; events: WhyEvent[] }>(
+    request<{ entity_ref: string; events: WhyEvent[]; memory?: MemoryBelief[] }>(
       "GET",
       apiPaths.GET_WHY_ENTITY_TYPE_ENTITY_ID.replace("{entity_type}", kind).replace(
         "{entity_id}",
         id,
       ),
     ),
-  anomalies: () => request<AnomalyCard[]>("GET", apiPaths.GET_ANOMALIES),
+  // status_filter "" = all statuses; the page splits open vs handled itself.
+  anomalies: (statusFilter = "") =>
+    request<AnomalyCard[]>("GET", `${apiPaths.GET_ANOMALIES}?status_filter=${statusFilter}`),
   decideAnomaly: (id: string, decision: "accepted" | "dismissed" | "recovered") =>
     request<{ ok: boolean }>(
       "POST",
@@ -316,6 +378,12 @@ export const api = {
       "GET",
       `${apiPaths.GET_BOOKS_TRANSACTIONS}${statusFilter ? `?status_filter=${statusFilter}` : ""}`,
     ),
+  exceptions: () => request<TxnPage>("GET", apiPaths.GET_BOOKS_EXCEPTIONS),
+  switchTenant: (tenantId: string) =>
+    request<TokenPair>(
+      "POST",
+      apiPaths.POST_TENANTS_TENANT_ID_SWITCH.replace("{tenant_id}", tenantId),
+    ),
   chartOfAccounts: () =>
     request<ChartAccount[]>("GET", apiPaths.GET_BOOKS_CHART_OF_ACCOUNTS),
   correctCategory: (txnId: string, code: string) =>
@@ -335,9 +403,8 @@ export const api = {
   }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_ONBOARDING}`, {
+    const res = await authorizedFetch(`${API_PREFIX}${apiPaths.POST_BOOKS_ONBOARDING}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
     });
     if (!res.ok) {
@@ -349,9 +416,8 @@ export const api = {
   importStatement: async (file: File): Promise<{ document_id: string; run_id: string }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_IMPORTS}`, {
+    const res = await authorizedFetch(`${API_PREFIX}${apiPaths.POST_BOOKS_IMPORTS}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
     });
     if (!res.ok) {
@@ -360,7 +426,15 @@ export const api = {
     }
     return res.json();
   },
-  me: () => request<{ email: string; active_tenant_id: string; role: string }>("GET", apiPaths.GET_ME),
+  me: () =>
+    request<{
+      email: string;
+      active_tenant_id: string;
+      role: string;
+      memberships: { tenant_id: string; tenant_name: string; role: string }[];
+    }>("GET", apiPaths.GET_ME),
+  agentHealth: () =>
+    request<{ worker: boolean; memory: boolean }>("GET", apiPaths.GET_AGENT_HEALTH),
   startRun: (graph: string, params: Record<string, unknown> = {}) =>
     request<RunOut>("POST", apiPaths.POST_AGENT_RUNS, { graph, params }),
   listRuns: () => request<RunOut[]>("GET", apiPaths.GET_AGENT_RUNS),
