@@ -334,3 +334,61 @@ async def list_exceptions(auth: Auth) -> TxnPage:
         txns = await repo.unmatched_transactions(auth.tenant_id)
         counts = await repo.transaction_counts(auth.tenant_id)
     return TxnPage(items=[_txn_out(t) for t in txns], next_cursor=None, counts=counts)
+
+
+class TallySyncOut(BaseModel):
+    mode: str  # fixture | live — demo data never masquerades as a live pull
+    period: str
+    invoices_created: int
+    invoices_skipped: int
+    bills_created: int
+    bills_skipped: int
+    parties_created: int
+    unclassified_vendors: int
+
+
+@router.post("/books/imports/tally", response_model=TallySyncOut)
+async def import_from_tally(auth: Auth) -> TallySyncOut:
+    """Pull outstanding receivables + payables through the Tally connector.
+
+    Runs the real gateway protocol in both modes; "fixture" replays checked-in
+    gateway XML when no TallyPrime is reachable (crucible C1 demo path).
+    """
+    if auth.role == "viewer":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "viewers cannot import")
+    from datetime import UTC, datetime, timedelta
+
+    from findesk_tools.tally import ToolError as TallyError
+
+    from app.services.tally_sync import build_gateway, sync_books
+
+    gateway, mode = build_gateway()
+    to_date = datetime.now(UTC).date().isoformat()
+    from_date = (datetime.now(UTC) - timedelta(days=120)).date().isoformat()
+    try:
+        # gateway transport is sync (stdlib) — keep the event loop free
+        receivables = await anyio.to_thread.run_sync(
+            lambda: gateway.list_invoices(from_date, to_date)
+        )
+        payables = await anyio.to_thread.run_sync(
+            lambda: gateway.list_bills(from_date, to_date)
+        )
+    except TallyError as exc:
+        code = status.HTTP_503_SERVICE_UNAVAILABLE if exc.retryable else 422
+        raise HTTPException(code, f"tally gateway: {exc.reason}") from exc
+
+    async with session_scope() as session:
+        summary = await sync_books(
+            session, auth.tenant_id, receivables=receivables, payables=payables
+        )
+        await write_audit(
+            session,
+            tenant_id=auth.tenant_id,
+            actor={"kind": "user", "id": auth.user_id},
+            action="books.tally_sync",
+            entity_ref=f"tenant:{auth.tenant_id}",
+            payload={"mode": mode, **{k: v for k, v in summary.items() if k != "fetched_at"}},
+        )
+    return TallySyncOut(mode=mode, period=f"{from_date}..{to_date}", **{
+        k: v for k, v in summary.items() if k != "fetched_at"
+    })

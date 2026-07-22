@@ -1,5 +1,6 @@
 """tally@v1 — TallyPrime HTTP-XML gateway connector (contracts/tools.md)."""
 
+from findesk_tools.tally.demo import fixture_transport
 from findesk_tools.tally.gateway import DEFAULT_GATEWAY_URL, TallyGateway, Transport
 from findesk_tools.tally.schemas import (
     Account,
@@ -28,4 +29,5 @@ __all__ = [
     "ToolError",
     "Transport",
     "VoucherDraft",
+    "fixture_transport",
 ]

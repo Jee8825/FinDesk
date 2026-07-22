@@ -473,6 +473,17 @@ export const api = {
     }
     return res.json();
   },
+  tallySync: () =>
+    request<{
+      mode: "fixture" | "live";
+      period: string;
+      invoices_created: number;
+      invoices_skipped: number;
+      bills_created: number;
+      bills_skipped: number;
+      parties_created: number;
+      unclassified_vendors: number;
+    }>("POST", apiPaths.POST_BOOKS_IMPORTS_TALLY),
   me: () =>
     request<{
       email: string;

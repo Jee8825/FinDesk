@@ -112,6 +112,24 @@ function BooksPageInner() {
     }
   }
 
+  const tallyPull = useMutation({
+    mutationFn: () => api.tallySync(),
+    onSuccess: (r) => {
+      setError(null);
+      setNote(
+        `Tally pull (${r.mode}): ${r.invoices_created} receivables + ${r.bills_created} payables in, ` +
+          `${r.invoices_skipped + r.bills_skipped} already known` +
+          (r.unclassified_vendors > 0
+            ? ` — ${r.unclassified_vendors} vendor(s) need MSME tagging for the Payables Shield.`
+            : "."),
+      );
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["payables"] });
+      queryClient.invalidateQueries({ queryKey: ["radar"] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "tally pull failed"),
+  });
+
   async function upload(file: File) {
     setError(null);
     setUploading(true);
@@ -165,6 +183,13 @@ function BooksPageInner() {
           />
           <GhostBtn onClick={() => onboardInput.current?.click()} title="Tally/Zoho invoice export — seeds payment history into memory">
             Import invoices
+          </GhostBtn>
+          <GhostBtn
+            onClick={() => tallyPull.mutate()}
+            disabled={tallyPull.isPending}
+            title="Pull outstanding receivables + payables through the TallyPrime HTTP-XML connector"
+          >
+            {tallyPull.isPending ? "Pulling…" : "Pull from Tally"}
           </GhostBtn>
           <input
             ref={fileInput}

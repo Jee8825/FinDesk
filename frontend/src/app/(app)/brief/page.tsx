@@ -75,6 +75,7 @@ export default function BriefPage() {
   const conflicts = useQuery({ queryKey: ["conflicts"], queryFn: () => api.conflicts() });
   const anomalies = useQuery({ queryKey: ["anomalies"], queryFn: () => api.anomalies("open") });
   const runs = useQuery({ queryKey: ["runs"], queryFn: () => api.listRuns() });
+  const payables = useQuery({ queryKey: ["payables"], queryFn: () => api.payables() });
 
   const { greeting, dateLine } = istGreeting();
   const f = forecast.data;
@@ -199,6 +200,38 @@ export default function BriefPage() {
               </ul>
             )}
           </Card>
+
+          {/* ---- what you owe (43B(h) shield) — only when exposed ------ */}
+          {payables.data && payables.data.items.length > 0 && (
+            <Card className="px-5 py-4">
+              <div className="flex items-center justify-between">
+                <MonoLabel>what you owe MSE vendors — protect your deduction</MonoLabel>
+                <Link href="/payables" className="mono-label text-accent hover:underline">
+                  payables shield →
+                </Link>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                <span className="tnum font-mono font-semibold text-ink">
+                  {formatINRCompact(payables.data.totals.open_mse_paise)} open
+                </span>
+                {payables.data.totals.disallowance_risk_paise > 0 && (
+                  <span className="text-blush">
+                    {formatINRCompact(payables.data.totals.disallowance_risk_paise)} deduction at
+                    risk under 43B(h)
+                  </span>
+                )}
+                {payables.data.totals.closing_window_paise > 0 && (
+                  <span className="text-accent">
+                    {formatINRCompact(payables.data.totals.closing_window_paise)} due within 7 days
+                  </span>
+                )}
+                {payables.data.totals.disallowance_risk_paise === 0 &&
+                  payables.data.totals.closing_window_paise === 0 && (
+                    <Pill tone="good">all inside the 45-day window</Pill>
+                  )}
+              </div>
+            </Card>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             {/* ---- what the agent did ---------------------------------- */}

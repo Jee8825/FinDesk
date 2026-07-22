@@ -49,6 +49,11 @@ paths:
     get: { tags: [books], summary: Normalized bank feed (cursor paginated), responses: { "200": { description: page } } }
   /books/imports:
     post: { tags: [books], summary: Upload statement/export file → 202 + run_id, responses: { "202": { description: queued } } }
+  /books/imports/tally:
+    post:
+      tags: [books]
+      summary: Pull outstanding receivables+payables through the Tally HTTP-XML connector (fixture or live mode; mode echoed in the response)
+      responses: { "200": { description: sync summary } }
   /books/onboarding:
     post:
       tags: [books]

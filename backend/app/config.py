@@ -32,6 +32,13 @@ class Settings(BaseSettings):
 
     otel_service_name: str = "findesk-backend"
 
+    # TallyPrime HTTP-XML gateway (tools/tally). "fixture" exercises the real
+    # connector against checked-in gateway XML (clearly labelled in responses);
+    # "live" posts to tally_gateway_url — point it at a running TallyPrime.
+    tally_mode: str = "fixture"  # fixture | live
+    tally_gateway_url: str = "http://localhost:9000"
+    tally_company: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
