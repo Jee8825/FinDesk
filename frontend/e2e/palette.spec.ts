@@ -33,7 +33,9 @@ test("palette finds a transaction and jumps to its Why? drawer", async ({ page }
 
 test("ledger beam pulses while an agent run is live", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("[data-agent-live]")).toHaveCount(0);
+  // a previous spec's run may still be draining — wait for quiet instead of
+  // asserting it (order-dependent flake seen twice in full-suite runs)
+  await expect(page.locator("[data-agent-live]")).toHaveCount(0, { timeout: 30_000 });
 
   await page.keyboard.press("ControlOrMeta+k");
   const input = page.getByPlaceholder(/Jump to a page/);

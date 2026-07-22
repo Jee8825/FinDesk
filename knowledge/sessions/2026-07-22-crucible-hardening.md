@@ -86,3 +86,39 @@ per phase.
 - Kill log (P6 exploration): GST recon (another mock, dependency lens),
   WhatsApp chase preview (aesthetics, not value), data-room export (good,
   deferred — lost to Tally pull-through on impact÷effort).
+
+---
+
+## Lap 2 (2026-07-23, same branch) — self-judgment + arch hardening
+
+Judge pass over lap-1 output + foundations, then Q1–Q7. Full detail:
+`docs/product/crucible-stress-test.md` lap-2 section.
+
+- **Q1 worker**: stable consumer name + XPENDING/XCLAIM adoption (idle>60s) +
+  dead-letter `agents:dead` after 3 deliveries, run marked failed. The PEL-
+  orphaning hole (random consumer names) was the lap's biggest arch find.
+- **Q2**: `statutory_bank_rate_bps` threaded Settings→clocks/payables; drift
+  test pins the two defaults together.
+- **Q3**: bills.outstanding_paise (0013); exposure on unpaid portion; re-pull
+  refreshes/settles. **Live verification caught sync resurrecting a
+  recon-paid invoice from a stale export** → "paid is terminal", disagreement
+  = `status_conflicts` count, never overwritten.
+- **Q4**: dated in-horizon bills land in their due week (all scenarios),
+  superseding that vendor's statistical baseline (fuzzy label containment).
+- **Q5**: Deduction Defense — closing by deadline, breached by daily §16
+  bleed, affordability from latest forecast opening balance.
+- **Q6**: GET /audit/verify recomputes the hash chain live; tamper test on 98
+  real entries: broken_at → restore → valid. Data-room chip.
+- **Q7**: agents/CLAUDE.md catalog implemented-vs-planned; enforcer no-recall
+  documented deliberate; beam spec flake fixed (wait-for-quiet, seen 2×).
+
+### Lap-2 gotchas
+- First full Playwright run after a dev-server restart can fail ONE random
+  spec on cold-compile latency; re-run settles it. CI (prod build) immune.
+- asyncpg + SQLAlchemy same-flush parent/child FK: flush after parent (again).
+- Audit tamper-testing live: sqlalchemy scripts MUST run inside the venv or
+  the restore silently no-ops (hit once; chain re-verified after fix).
+
+Gates at lap-2 close: **121 unit** (backend 43 · agents 54 · tools 24) ·
+tsc 0 · eslint 0 · **Playwright 24/24** · prod build ✓ · no contract drift ·
+migrations → 0013. 7 commits this lap.

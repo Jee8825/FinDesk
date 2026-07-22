@@ -125,3 +125,38 @@ The engineering is genuinely strong — structurally enforced guardrails, determ
 - [RBI AA framework guide](https://hyperverge.co/blog/account-aggregator-framework-rbi/) · [CASParser AA state 2026](https://casparser.in/blog/state-of-account-aggregator-2026/) — FIU eligibility gate (C2)
 - [M1xchange](https://www.m1xchange.com/) · [Karbon TReDS comparison](https://www.karboncard.com/blog/treds-platforms-in-india-compared-rxil-m1xchange) — TReDS access reality
 - [Truewind review](https://accountingaitools.com/tools/truewind/) · [Zeni review](https://agentaya.com/ai-review/zeni/) — agentic-close field state (moderate-confidence review sites; treated as `[I]` throughout)
+
+---
+
+# Lap 2 — Self-judgment + hardening (2026-07-23)
+
+Second pass, this time pointed at our own lap-1 output and the underlying
+architecture. Method unchanged: find it, prove it, fix it, re-verify.
+
+## What the judge pass found (and what was done)
+
+| Finding | Severity | Resolution |
+|---|---|---|
+| Worker PEL orphaning: random consumer names + no reclaim — a died worker's undelivered jobs hang forever, runs spin eternally | **Critical (arch)** | Stable consumer name, XPENDING/XCLAIM adoption ≥60s idle, dead-letter to `agents:dead` after 3 deliveries, run closed failed. 3 tests. `[V]` |
+| Tally re-pull was insert-only — outstanding never refreshed, settlements invisible | Important | `bills.outstanding_paise` (0013); §16/43B(h) exposure runs on the unpaid portion; re-pull refreshes + settles at zero. `[V]` |
+| **Caught live in re-verification:** re-pull resurrected a recon-paid invoice to open (stale export vs. bank evidence) | **Critical (data)** | "Paid" is terminal for sync; disagreement surfaces as `status_conflicts`, never overwritten. Proven: conflict counted, paid stayed paid. `[V]` |
+| Bank rate "configurable" only in a comment | Worthwhile | `statutory_bank_rate_bps` in Settings, threaded to clocks/payables; drift test pins defaults together. `[V]` |
+| Forecast ignored known dated payables (statistical baseline only) | Important | In-horizon bills land in their due week in every scenario; that vendor's smoothed baseline is superseded (dated knowledge beats statistics). 3 engine tests. `[V]` |
+| Payables Shield was read-only — exposure without a next action | Important | Deduction Defense: deterministic ranked pay-first plan (closing by deadline, breached by daily §16 bleed), cash-aware via latest forecast. `[V]` |
+| Audit chain claimed tamper-evidence nobody could check | Worthwhile | `GET /audit/verify` recomputes the chain live; proven on 98 entries: tamper → `broken_at`, restore → valid. Data-room chip. `[V]` |
+| agents/CLAUDE.md drift: month_end_close listed as existing; phantom policies/ + models.py | Minor | Catalog now implemented-vs-planned; layout matches reality; enforcer's no-recall deviation documented as deliberate. `[V]` |
+
+## Deliberately not done (judged and skipped)
+- **payables_watch agent graph** — the read-model recompute-on-GET is correct
+  and cheaper; a graph would add moving parts without new information.
+- **Marking invoices partially-paid from Tally** — Invoice has no outstanding
+  column; recon owns invoice state. Sync uses unpaid-portion-as-amount for new
+  tally-sourced invoices and never fights recon on status.
+- **Merging bill outflows into forecast drivers JSON** — frontend driver
+  shapes assume inflows; numbers + narrative carry the change without a
+  contract break. Driver-level surfacing is a UI follow-up, not a math gap.
+
+## Gates at lap-2 close
+backend 43 · agents 54 · tools 24 unit (121) · tsc 0 · eslint 0 ·
+Playwright 24/24 · prod build ✓ · contracts regen no-drift ✓ ·
+migrations through 0013.
