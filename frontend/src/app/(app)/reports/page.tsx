@@ -56,7 +56,7 @@ export default function ReportsPage() {
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="rounded-lg border border-line bg-cream px-3 py-2 text-sm font-semibold text-ink outline-none"
+          className="rounded-lg border border-line bg-white/[0.05] px-3 py-2 text-sm font-semibold text-ink outline-none"
           aria-label="report period"
         >
           {PERIODS.map((p) => (
@@ -103,7 +103,7 @@ export default function ReportsPage() {
                     <motion.tr
                       key={c.category_code}
                       variants={{ initial: { opacity: 0 }, animate: { opacity: 1 } }}
-                      className="border-b border-line2/70 last:border-0 hover:bg-cream"
+                      className="border-b border-line2/70 last:border-0 hover:bg-white/[0.06]"
                     >
                       <td className="px-6 py-3 font-semibold text-ink">{c.category_name}</td>
                       <td className="whitespace-nowrap px-6 py-3 text-right font-mono font-semibold text-ink">

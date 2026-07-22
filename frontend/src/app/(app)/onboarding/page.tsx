@@ -37,10 +37,10 @@ function StepDot({ index, current }: { index: number; current: number }) {
         animate={{ scale: active ? 1.1 : 1 }}
         className={`flex h-8 w-8 items-center justify-center rounded-full font-mono text-sm font-bold ${
           done
-            ? "bg-moss text-white"
+            ? "bg-moss text-[#06130c]"
             : active
-              ? "bg-accent text-white shadow-[0_8px_20px_-8px_rgba(232,115,10,0.8)]"
-              : "border-2 border-line bg-cream text-faint"
+              ? "bg-accent text-[#1a1204] shadow-[0_8px_20px_-8px_rgba(255,160,40,0.8)]"
+              : "border-2 border-line bg-white/[0.05] text-faint"
         }`}
       >
         {done ? <Check size={14} /> : index + 1}
@@ -221,7 +221,7 @@ export default function OnboardingPage() {
                   Planner → Executor → Critic, live. Anything ambiguous waits for you in the
                   queues — nothing consequential commits without approval.
                 </p>
-                <div className="mt-5 max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-cream p-4">
+                <div className="mt-5 max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-white/[0.05] p-4">
                   {events.map((evt, i) => (
                     <motion.div
                       key={i}

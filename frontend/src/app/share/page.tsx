@@ -19,7 +19,7 @@ function SharedRoom() {
   });
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#efe8d6] to-paper">
+    <main className="min-h-screen bg-gradient-to-b from-[#0a0e1a] to-paper">
       <motion.div
         className="mx-auto max-w-4xl p-8"
         initial={{ opacity: 0, y: 16 }}
@@ -37,13 +37,13 @@ function SharedRoom() {
             </div>
           </div>
           {room.data?.shared && (
-            <span className="mono-label rounded-full border border-line bg-cream px-3 py-1.5 text-mute">
+            <span className="mono-label rounded-full border border-line bg-white/[0.05] px-3 py-1.5 text-mute">
               expires {new Date(room.data.shared.expires_at * 1000).toLocaleDateString("en-IN")}
             </span>
           )}
         </div>
         {!token && <p className="text-sm text-faint">Missing share token.</p>}
-        {room.isLoading && <div className="h-64 animate-pulse rounded-2xl bg-[#efe9db]" />}
+        {room.isLoading && <div className="h-64 animate-pulse rounded-2xl bg-white/[0.05]" />}
         {room.isError && (
           <p className="text-sm text-claret">This share link is invalid or has expired.</p>
         )}

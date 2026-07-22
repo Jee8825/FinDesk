@@ -84,7 +84,7 @@ export default function CategorizationPage() {
                         className={`w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                           selected === a.code
                             ? "bg-accent/10 font-semibold text-accent"
-                            : "text-mute hover:bg-cream"
+                            : "text-mute hover:bg-white/[0.06]"
                         }`}
                       >
                         {a.name}
@@ -135,7 +135,7 @@ export default function CategorizationPage() {
                     <motion.tr
                       key={v.vendor}
                       variants={{ initial: { opacity: 0 }, animate: { opacity: 1 } }}
-                      className="border-b border-line2/70 last:border-0 hover:bg-cream"
+                      className="border-b border-line2/70 last:border-0 hover:bg-white/[0.06]"
                     >
                       <td className="px-6 py-3.5">
                         <span className="font-bold text-ink">{v.vendor}</span>

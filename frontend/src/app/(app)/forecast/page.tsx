@@ -51,24 +51,24 @@ function BandsChart({ f }: { f: ForecastOut }) {
             x2={x(f.gap.week)}
             y1={PAD}
             y2={H - PAD}
-            stroke="#e8a3a0"
+            stroke="#ff6e66"
             strokeWidth="1"
             strokeDasharray="4 4"
           />
-          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="#e8a3a0" fontFamily="var(--font-plex-mono)">
+          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="#ff6e66" fontFamily="var(--font-plex-mono)">
             W{f.gap.week} GAP {formatINRCompact(f.gap.shortfall_paise)}
           </text>
         </>
       )}
-      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="#4a4640" strokeDasharray="4 4" strokeWidth="1" />
-      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="#7d7a72" fontFamily="var(--font-plex-mono)">₹0</text>
+      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="rgba(148,163,204,0.3)" strokeDasharray="4 4" strokeWidth="1" />
+      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="#6c7490" fontFamily="var(--font-plex-mono)">₹0</text>
       {band && (
-        <motion.path d={band} fill="#e8730a" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
+        <motion.path d={band} fill="#ffa028" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
       )}
       <motion.path
         d={path(up)}
         fill="none"
-        stroke="#9fd2c0"
+        stroke="#2dd4bf"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -78,7 +78,7 @@ function BandsChart({ f }: { f: ForecastOut }) {
       <motion.path
         d={path(down)}
         fill="none"
-        stroke="#e8a3a0"
+        stroke="#a78bfa"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -88,7 +88,7 @@ function BandsChart({ f }: { f: ForecastOut }) {
       <motion.path
         d={path(base)}
         fill="none"
-        stroke="#e8730a"
+        stroke="#ffa028"
         strokeWidth="2.5"
         strokeLinecap="round"
         initial={{ pathLength: 0 }}
@@ -101,8 +101,8 @@ function BandsChart({ f }: { f: ForecastOut }) {
           cx={x(w.week)}
           cy={y(w.closing_paise)}
           r="3"
-          fill="#262420"
-          stroke="#e8730a"
+          fill="#101527"
+          stroke="#ffa028"
           strokeWidth="2"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -114,7 +114,7 @@ function BandsChart({ f }: { f: ForecastOut }) {
           cx={x(f.gap.week)}
           cy={y(Math.min(...(down.length ? down : base).map((w) => w.closing_paise)))}
           r="5"
-          fill="#e8a3a0"
+          fill="#ff6e66"
           initial={{ scale: 0 }}
           animate={{ scale: [0, 1.4, 1] }}
           transition={{ delay: 1.2, duration: 0.5 }}
@@ -242,7 +242,7 @@ export default function ForecastPage() {
                 <motion.span
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(232,115,10,0.7)] transition-colors hover:bg-[#d96905]"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-[#1a1204] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
                 >
                   See WC actions →
                 </motion.span>

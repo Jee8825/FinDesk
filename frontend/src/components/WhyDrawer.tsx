@@ -27,7 +27,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
         exit={{ opacity: 0 }}
       >
         <motion.div
-          className="h-full w-full max-w-lg overflow-y-auto border-l border-line bg-cream p-6"
+          className="glass-strong grain h-full w-full max-w-lg overflow-y-auto border-l border-line p-6"
           onClick={(e) => e.stopPropagation()}
           initial={{ x: 64, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -42,7 +42,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
             <button
               onClick={onClose}
               aria-label="close"
-              className="rounded-lg border border-line p-2 text-mute transition-colors hover:bg-cream2"
+              className="rounded-lg border border-line p-2 text-mute transition-colors hover:bg-white/[0.06]"
             >
               <X size={14} />
             </button>
@@ -55,7 +55,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
           {trail.isLoading && (
             <div className="mt-6 space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-16 animate-pulse rounded-xl bg-[#efe9db]" />
+                <div key={i} className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />
               ))}
             </div>
           )}
