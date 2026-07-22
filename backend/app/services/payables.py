@@ -89,6 +89,77 @@ def compliance_row(
     }
 
 
+def defense_plan(
+    items: list[dict[str, Any]],  # {bill_number, vendor, outstanding_paise, clock}
+    *,
+    cash_available_paise: int | None,
+) -> dict[str, Any]:
+    """Ranked pay-first plan protecting the 43B(h) deduction. Pure.
+
+    Ordering logic (deterministic, defensible to a CA):
+    1. **Closing-window bills first, tightest deadline first** — paying inside
+       §15 avoids the deferral entirely and no §16 interest ever accrues. The
+       cheapest consequence is the one that never happens.
+    2. **Breached bills by daily interest bleed, biggest first** — their
+       deduction survives if paid before FY-end, but §16 interest (never
+       deductible) accrues every day; the bleed rate is the urgency.
+
+    ``cash_available_paise`` (latest forecast opening balance) caps what is
+    marked affordable now; the plan itself is advice — FinDesk moves no money.
+    """
+    closing = [i for i in items if i["clock"]["band"] == "closing"]
+    breached = [i for i in items if i["clock"]["band"] == "breached"]
+    closing.sort(key=lambda i: (i["clock"]["days_left"], -i["outstanding_paise"]))
+
+    def daily_bleed(i: dict[str, Any]) -> int:
+        return round(i["outstanding_paise"] * i["clock"]["annual_rate_bps"] / 10_000 / 365)
+
+    breached.sort(key=lambda i: (-daily_bleed(i), i["clock"]["overdue_days"]))
+
+    plan: list[dict[str, Any]] = []
+    allocated = 0
+    for item in closing + breached:
+        c = item["clock"]
+        if c["band"] == "closing":
+            why = (
+                f"pay within {c['days_left']} day(s) to stay inside §15 — "
+                "no deferral, no interest, ever"
+            )
+            action_by = c["statutory_due_date"][:10]
+            bleed = 0
+        else:
+            bleed = daily_bleed(item)
+            why = (
+                f"§16 interest bleeds ~₹{bleed / 100:,.0f}/day (never deductible); "
+                f"paying before FY-end ({c['fy_end'][:10]}) keeps the deduction this year"
+            )
+            action_by = c["fy_end"][:10]
+        allocated += item["outstanding_paise"]
+        plan.append(
+            {
+                "bill_number": item["bill_number"],
+                "vendor": item["vendor"],
+                "outstanding_paise": item["outstanding_paise"],
+                "band": c["band"],
+                "action_by": action_by,
+                "why": why,
+                "daily_bleed_paise": bleed,
+                "affordable_now": (
+                    cash_available_paise is None or allocated <= cash_available_paise
+                ),
+            }
+        )
+    return {
+        "items": plan,
+        "totals": {
+            "planned_paise": sum(p["outstanding_paise"] for p in plan),
+            "deduction_protected_paise": sum(p["outstanding_paise"] for p in plan),
+            "daily_bleed_paise": sum(p["daily_bleed_paise"] for p in plan),
+        },
+        "cash_basis_paise": cash_available_paise,
+    }
+
+
 def totals(rows: list[dict[str, Any]], amounts: list[int]) -> dict[str, int]:
     """Roll-up for the header cards. rows[i] corresponds to amounts[i]."""
     return {

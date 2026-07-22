@@ -11,12 +11,21 @@ from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import Auth
 from app.config import get_settings
 from app.db import session_scope
 from app.db.books_repo import BooksRepo
-from app.services.payables import CA_NOTE, MSE_STATUSES, compliance_row, totals
+from app.db.models import Forecast
+from app.services.payables import (
+    CA_NOTE,
+    MSE_STATUSES,
+    compliance_row,
+    defense_plan,
+    totals,
+)
 
 router = APIRouter(tags=["cash"])
 
@@ -38,13 +47,19 @@ class PayablesOut(BaseModel):
     ca_note: str
 
 
-@router.get("/payables/compliance", response_model=PayablesOut)
-async def payables_compliance(auth: Auth) -> PayablesOut:
-    now = datetime.now(UTC)
-    async with session_scope() as session:
-        repo = BooksRepo(session)
-        parties = {c.id: c for c in await repo.counterparties(auth.tenant_id)}
-        bills = await repo.open_bills(auth.tenant_id)
+class PlanOut(BaseModel):
+    items: list[dict[str, Any]]
+    totals: dict[str, int]
+    cash_basis_paise: int | None
+    ca_note: str
+
+
+async def _mse_items(
+    session: AsyncSession, tenant_id: str, now: datetime
+) -> tuple[list[PayableItem], list[dict[str, Any]], list[int], int]:
+    repo = BooksRepo(session)
+    parties = {c.id: c for c in await repo.counterparties(tenant_id)}
+    bills = await repo.open_bills(tenant_id)
 
     items: list[PayableItem] = []
     rows: list[dict[str, Any]] = []
@@ -75,9 +90,44 @@ async def payables_compliance(auth: Auth) -> PayablesOut:
                 clock=row,
             )
         )
-
     # most urgent first: breached by overdue days, then closing windows
     items.sort(key=lambda i: (-i.clock["overdue_days"], i.clock["days_left"]))
+    return items, rows, amounts, non_mse
+
+
+@router.get("/payables/compliance", response_model=PayablesOut)
+async def payables_compliance(auth: Auth) -> PayablesOut:
+    now = datetime.now(UTC)
+    async with session_scope() as session:
+        items, rows, amounts, non_mse = await _mse_items(session, auth.tenant_id, now)
     return PayablesOut(
         items=items, totals=totals(rows, amounts), non_mse_open_count=non_mse, ca_note=CA_NOTE
     )
+
+
+@router.get("/payables/plan", response_model=PlanOut)
+async def payables_plan(auth: Auth) -> PlanOut:
+    """Deduction Defense — ranked pay-first plan over breached/closing bills."""
+    now = datetime.now(UTC)
+    async with session_scope() as session:
+        items, _rows, _amounts, _ = await _mse_items(session, auth.tenant_id, now)
+        latest = await session.scalar(
+            select(Forecast)
+            .where(Forecast.tenant_id == auth.tenant_id)
+            .order_by(Forecast.created_at.desc())
+            .limit(1)
+        )
+    plan = defense_plan(
+        [
+            {
+                "bill_number": i.bill_number,
+                "vendor": i.vendor,
+                "outstanding_paise": i.outstanding_paise,
+                "clock": i.clock,
+            }
+            for i in items
+            if i.clock["band"] in {"closing", "breached"}
+        ],
+        cash_available_paise=latest.opening_balance_paise if latest else None,
+    )
+    return PlanOut(**plan, ca_note=CA_NOTE)

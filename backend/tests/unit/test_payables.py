@@ -78,3 +78,56 @@ def test_settings_default_rate_matches_engine_default():
     from app.services.statutory import DEFAULT_BANK_RATE_BPS
 
     assert Settings().statutory_bank_rate_bps == DEFAULT_BANK_RATE_BPS
+
+
+def _plan_item(number, band, *, days_left=0, overdue=0, outstanding=1_000_000):
+    from app.services.payables import compliance_row as _cr  # noqa: F401 — shape doc only
+
+    return {
+        "bill_number": number,
+        "vendor": "V",
+        "outstanding_paise": outstanding,
+        "clock": {
+            "band": band,
+            "days_left": days_left,
+            "overdue_days": overdue,
+            "annual_rate_bps": 2025,
+            "statutory_due_date": "2026-07-25T00:00:00+00:00",
+            "fy_end": "2027-03-31T18:29:59+00:00",
+        },
+    }
+
+
+def test_defense_plan_orders_closing_by_deadline_then_breached_by_bleed():
+    from app.services.payables import defense_plan
+
+    plan = defense_plan(
+        [
+            _plan_item("B-slow-bleed", "breached", overdue=40, outstanding=1_000_000),
+            _plan_item("C-tight", "closing", days_left=1),
+            _plan_item("B-big-bleed", "breached", overdue=5, outstanding=50_000_000),
+            _plan_item("C-loose", "closing", days_left=6),
+        ],
+        cash_available_paise=None,
+    )
+    assert [p["bill_number"] for p in plan["items"]] == [
+        "C-tight", "C-loose", "B-big-bleed", "B-slow-bleed",
+    ]
+    # closing rows never bleed; breached rows bleed daily at 3× bank rate / 365
+    assert plan["items"][0]["daily_bleed_paise"] == 0
+    assert plan["items"][2]["daily_bleed_paise"] == round(50_000_000 * 0.2025 / 365)
+    assert plan["totals"]["planned_paise"] == 53_000_000
+
+
+def test_defense_plan_cash_cap_marks_affordability_in_rank_order():
+    from app.services.payables import defense_plan
+
+    plan = defense_plan(
+        [
+            _plan_item("C1", "closing", days_left=2, outstanding=3_000_000),
+            _plan_item("C2", "closing", days_left=4, outstanding=3_000_000),
+        ],
+        cash_available_paise=4_000_000,
+    )
+    assert [p["affordable_now"] for p in plan["items"]] == [True, False]
+    assert plan["cash_basis_paise"] == 4_000_000

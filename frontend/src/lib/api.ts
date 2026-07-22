@@ -291,6 +291,24 @@ export type PayablesOut = {
   ca_note: string;
 };
 
+export type PlanItem = {
+  bill_number: string;
+  vendor: string;
+  outstanding_paise: number;
+  band: "closing" | "breached";
+  action_by: string;
+  why: string;
+  daily_bleed_paise: number;
+  affordable_now: boolean;
+};
+
+export type PlanOut = {
+  items: PlanItem[];
+  totals: { planned_paise: number; deduction_protected_paise: number; daily_bleed_paise: number };
+  cash_basis_paise: number | null;
+  ca_note: string;
+};
+
 export type ForecastWeek = {
   week: number;
   week_start: string;
@@ -382,6 +400,7 @@ export const api = {
   }) => request<WhatifOut>("POST", apiPaths.POST_FORECAST_WHATIF, params),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
+  payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",

@@ -16,7 +16,7 @@ import {
   StatCard,
   stagger,
 } from "@/components/ui";
-import { api, formatINRCompact, type PayableItem } from "@/lib/api";
+import { api, formatINR, formatINRCompact, type PayableItem } from "@/lib/api";
 
 const BAND: Record<string, { label: string; tone: "neutral" | "warn" | "bad" | "good" }> = {
   within: { label: "within window", tone: "good" },
@@ -71,6 +71,54 @@ function BillRow({ item }: { item: PayableItem }) {
         <Pill tone={band.tone}>{band.label}</Pill>
       </td>
     </motion.tr>
+  );
+}
+
+function DefensePlan() {
+  const plan = useQuery({ queryKey: ["payables-plan"], queryFn: () => api.payablesPlan() });
+  const d = plan.data;
+  if (!d || d.items.length === 0) return null;
+  return (
+    <Card className="mt-5 px-5 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-bold text-dark-text">
+          Deduction Defense — pay these first
+        </p>
+        <p className="mono-annot">
+          {formatINRCompact(d.totals.planned_paise)} protects the deduction
+          {d.totals.daily_bleed_paise > 0 &&
+            ` · §16 bleeding ${formatINR(d.totals.daily_bleed_paise)}/day until paid`}
+          {d.cash_basis_paise != null &&
+            ` · cash basis ${formatINRCompact(d.cash_basis_paise)} (latest forecast)`}
+        </p>
+      </div>
+      <ol className="mt-3 space-y-2">
+        {d.items.map((item, idx) => (
+          <li key={item.bill_number} className="flex items-start gap-3 text-sm">
+            <span className="mono-label mt-0.5 shrink-0 text-dark-mute">{idx + 1}.</span>
+            <div className="min-w-0 flex-1">
+              <span className="font-bold text-dark-text">{item.vendor}</span>{" "}
+              <span className="font-mono text-xs text-dark-mute">{item.bill_number}</span>
+              <p className="mt-0.5 text-xs text-dark-mute">
+                {item.why} · act by {item.action_by}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="font-mono text-sm font-semibold text-dark-text">
+                {formatINRCompact(item.outstanding_paise)}
+              </p>
+              <Pill tone={item.affordable_now ? "good" : "warn"}>
+                {item.affordable_now ? "affordable now" : "needs inflow"}
+              </Pill>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <p className="mono-annot mt-3">
+        ◇ deterministic ranking: closing windows by deadline, breached by daily §16 bleed ·
+        advice only — findesk moves no money
+      </p>
+    </Card>
   );
 }
 
@@ -137,6 +185,8 @@ export default function PayablesPage() {
               sub="never deductible — pure cost"
             />
           </motion.div>
+
+          <DefensePlan />
 
           {p.items.length === 0 ? (
             <div className="mt-5">
