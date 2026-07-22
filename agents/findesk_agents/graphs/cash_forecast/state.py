@@ -25,5 +25,6 @@ class ForecastState(BaseModel):
     debits: list[dict[str, Any]] = Field(default_factory=list)
     avg_late_by_client: dict[str, float] = Field(default_factory=dict)
     spread_by_client: dict[str, float] = Field(default_factory=dict)
+    open_bills: list[dict[str, Any]] = Field(default_factory=list)
     result: dict[str, Any] = Field(default_factory=dict)
     summary: str = ""

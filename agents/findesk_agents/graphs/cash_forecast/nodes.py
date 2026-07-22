@@ -26,6 +26,7 @@ async def fetch(state: ForecastState) -> dict:
         "opening_balance_paise": ctx["opening_balance_paise"],
         "open_invoices": ctx["open_invoices"],
         "debits": ctx["debits"],
+        "open_bills": ctx.get("open_bills", []),
     }
 
 
@@ -67,6 +68,7 @@ async def projector(state: ForecastState) -> dict:
         avg_late_by_client=state.avg_late_by_client,
         monthly_outflows=monthly_outflows,
         spread_by_client=state.spread_by_client,
+        open_bills=state.open_bills,
     )
     await state.emitter.step(
         "project",

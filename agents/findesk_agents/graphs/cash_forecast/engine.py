@@ -73,6 +73,22 @@ def behavior_stats(lates: list[int]) -> dict[str, float]:
     return {"median_late": round(median, 1), "spread_days": round(spread, 1)}
 
 
+def _baseline_replaced(vendor: str, monthly_outflows: dict[str, int]) -> str | None:
+    """Baseline label a dated bill supersedes (conservative fuzzy match).
+
+    Dated knowledge beats statistics: when a vendor has actual bills with due
+    dates inside the horizon, their statistical monthly baseline would
+    double-count. Labels come from different worlds (bank narration vs. ledger
+    name), so match case-insensitively by containment either way.
+    """
+    v = vendor.lower()
+    for label in monthly_outflows:
+        low = label.lower()
+        if low in v or v in low:
+            return label
+    return None
+
+
 def project(
     *,
     start: datetime,
@@ -82,8 +98,24 @@ def project(
     monthly_outflows: dict[str, int],  # vendor label → stable monthly paise
     horizon_weeks: int = DEFAULT_HORIZON_WEEKS,
     spread_by_client: dict[str, float] | None = None,
+    open_bills: list[dict[str, Any]] | None = None,  # {number, vendor, outstanding_paise, due_date}
 ) -> dict[str, Any]:
-    weekly_outflow = round(sum(monthly_outflows.values()) / WEEKS_PER_MONTH)
+    # dated bills inside the horizon replace their vendor's statistical
+    # baseline; everything else keeps the smoothed monthly recurrence
+    dated: list[tuple[int, dict[str, Any]]] = []  # (week_index, bill)
+    replaced_labels: set[str] = set()
+    for bill in open_bills or []:
+        idx = _week_index(start, datetime.fromisoformat(bill["due_date"]), horizon_weeks)
+        if idx is None:
+            continue
+        dated.append((idx, bill))
+        label = _baseline_replaced(bill["vendor"], monthly_outflows)
+        if label:
+            replaced_labels.add(label)
+    effective_monthly = {
+        label: amount for label, amount in monthly_outflows.items() if label not in replaced_labels
+    }
+    weekly_outflow = round(sum(effective_monthly.values()) / WEEKS_PER_MONTH)
 
     scenarios: dict[str, list[dict[str, Any]]] = {}
     for scenario in SCENARIOS:
@@ -114,6 +146,10 @@ def project(
                     "expected": when.date().isoformat(),
                 }
             )
+        for idx, bill in dated:
+            # firm dated outflows land in their due week in every scenario —
+            # what we owe does not move with how clients pay us
+            weeks[idx]["outflow_paise"] += bill["outstanding_paise"]
         balance = opening_balance_paise
         for week in weeks:
             balance += week["inflow_paise"] - week["outflow_paise"]
@@ -128,12 +164,12 @@ def project(
         "outflow_basis": [
             {"vendor": vendor, "monthly_paise": amount}
             for vendor, amount in sorted(
-                monthly_outflows.items(), key=lambda kv: kv[1], reverse=True
+                effective_monthly.items(), key=lambda kv: kv[1], reverse=True
             )
         ],
         "scenarios": scenarios,
         "gap": gap,
-        "narrative": _narrative(scenarios, gap),
+        "narrative": _narrative(scenarios, gap, dated=dated),
     }
 
 
@@ -157,13 +193,24 @@ def detect_gap(scenarios: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | N
     return None
 
 
-def _narrative(scenarios: dict[str, list[dict[str, Any]]], gap: dict[str, Any] | None) -> list[str]:
+def _narrative(
+    scenarios: dict[str, list[dict[str, Any]]],
+    gap: dict[str, Any] | None,
+    *,
+    dated: list[tuple[int, dict[str, Any]]] | None = None,
+) -> list[str]:
     base_end = scenarios["base"][-1]["closing_paise"]
     down_end = scenarios["downside"][-1]["closing_paise"]
     lines = [
         f"Base case ends the horizon at {format_inr(base_end)}; "
         f"the downside band ends at {format_inr(down_end)}."
     ]
+    if dated:
+        total = sum(b["outstanding_paise"] for _, b in dated)
+        lines.append(
+            f"{len(dated)} dated vendor bill(s) totalling {format_inr(total)} are "
+            "scheduled in their due weeks (replacing those vendors' statistical baseline)."
+        )
     if gap is None:
         lines.append("No cash gap inside the horizon, even on the downside band.")
         return lines

@@ -64,3 +64,57 @@ def test_small_spread_keeps_flat_slip_floor():
     flat = project(**kwargs)
     small = project(**kwargs, spread_by_client={"c1": 3.0})
     assert small["scenarios"]["downside"] == flat["scenarios"]["downside"]
+
+
+def _bill(number: str, vendor: str, outstanding: int, due: str) -> dict:
+    return {"number": number, "vendor": vendor, "outstanding_paise": outstanding, "due_date": due}
+
+
+def test_dated_bill_lands_in_due_week_every_scenario():
+    result = project(
+        start=START,
+        opening_balance_paise=100_000_000,
+        open_invoices=[],
+        avg_late_by_client={},
+        monthly_outflows={},
+        open_bills=[_bill("PB-1", "Vega Logistics", 5_000_000, "2026-07-16T00:00:00+00:00")],
+    )
+    for scenario in ("upside", "base", "downside"):
+        weeks = result["scenarios"][scenario]
+        assert weeks[2]["outflow_paise"] == 5_000_000  # due in week 2, all scenarios
+        assert sum(w["outflow_paise"] for w in weeks) == 5_000_000
+    assert any("dated vendor bill" in line for line in result["narrative"])
+
+
+def test_dated_bill_replaces_vendor_baseline_not_others():
+    result = project(
+        start=START,
+        opening_balance_paise=0,
+        open_invoices=[],
+        avg_late_by_client={},
+        monthly_outflows={"VEGA LOGISTICS PVT": 4_330_000, "AWS India": 8_660_000},
+        open_bills=[_bill("PB-1", "Vega Logistics", 5_000_000, "2026-07-16T00:00:00+00:00")],
+    )
+    # Vega's smoothed baseline (₹43.3k/mo → ₹10k/wk) is superseded by its
+    # dated bill; AWS keeps recurring (₹86.6k/mo → ₹20k/wk)
+    assert result["weekly_outflow_paise"] == 2_000_000
+    assert [b["vendor"] for b in result["outflow_basis"]] == ["AWS India"]
+    weeks = result["scenarios"]["base"]
+    assert weeks[2]["outflow_paise"] == 2_000_000 + 5_000_000
+
+
+def test_bill_beyond_horizon_is_ignored_and_overdue_lands_week_zero():
+    result = project(
+        start=START,
+        opening_balance_paise=0,
+        open_invoices=[],
+        avg_late_by_client={},
+        monthly_outflows={},
+        open_bills=[
+            _bill("PB-far", "X", 1_000_000, "2027-07-01T00:00:00+00:00"),
+            _bill("PB-late", "Y", 2_000_000, "2026-06-01T00:00:00+00:00"),
+        ],
+    )
+    weeks = result["scenarios"]["base"]
+    assert weeks[0]["outflow_paise"] == 2_000_000  # already-due money is this week's problem
+    assert sum(w["outflow_paise"] for w in weeks) == 2_000_000  # beyond-horizon ignored

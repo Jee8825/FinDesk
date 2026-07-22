@@ -314,6 +314,7 @@ class ForecastContext(BaseModel):
     opening_balance_paise: int
     open_invoices: list[dict[str, Any]]
     debits: list[dict[str, Any]]
+    open_bills: list[dict[str, Any]] = []  # dated payables → firm outflows
 
 
 @router.get("/forecast/context", response_model=ForecastContext)
@@ -341,8 +342,18 @@ async def forecast_context(
         invoices = await repo.open_invoices(tenant_id)
         parties = {c.id: c.name for c in await repo.counterparties(tenant_id)}
         debit_rows = await repo.debit_transactions(tenant_id)
+        bills = await repo.open_bills(tenant_id)
     return ForecastContext(
         opening_balance_paise=int(credits) - int(debits_sum),
+        open_bills=[
+            {
+                "number": b.number,
+                "vendor": parties.get(b.counterparty_id, "?"),
+                "outstanding_paise": b.outstanding_paise,
+                "due_date": b.due_date.isoformat(),
+            }
+            for b in bills
+        ],
         open_invoices=[
             {
                 "id": i.id,
