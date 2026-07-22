@@ -8,8 +8,6 @@ on:
   schedule:
     - cron: "30 21 * * *" # 03:00 IST nightly
   workflow_dispatch:
-  push:
-    branches: [feat/design-v2] # TEMP: proving run — removed before merge
 
 concurrency:
   group: e2e-nightly

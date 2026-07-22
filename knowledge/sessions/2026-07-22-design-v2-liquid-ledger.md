@@ -74,10 +74,29 @@ eslint 0 · Playwright **18/18** · `npm run build` ✓.
   script, Settings Appearance card (localStorage `fd-theme`, dark
   default). All light pairs AA-verified (text ≥4.68, marks ≥4.88 vs 3.0).
 - **R4** — `.github/workflows/e2e-nightly.yml`: pg16+redis7 services,
-  alembic+seed, backend+worker headless, Playwright suite. Recall
-  deliberately absent — dead RECALL_BASE_URL + `E2E_LITE=1` skips the
-  badge-live spec. Cron 03:00 IST + workflow_dispatch (registers once
-  the file reaches the default branch).
+  alembic+seed, backend+worker headless, **fixture statement imported
+  through the real /books/imports pipeline** (fresh DBs have no bank
+  feed — seed creates tenants/invoices only), prod build, Playwright
+  suite. Recall deliberately absent — dead RECALL_BASE_URL +
+  `E2E_LITE=1` skips the badge-live spec. **Proven green: 20 passed,
+  1 skipped in 48s** (6 iterations to get there). Cron 03:00 IST +
+  workflow_dispatch (registers once the file reaches the default
+  branch).
+
+### CI e2e gotchas (hard-won, run 1→6)
+- Local packages install in dependency order: `shared/py → tools →
+  backend → agents` (pip can't resolve findesk-shared/-tools from PyPI).
+- **Never run the suite against `next dev` in CI** — cold compiles on a
+  2-core runner starve 5s expect timeouts (three.js chunks worst).
+  Prod build + `npm run start` via `E2E_PROD=1` webServer switch.
+- Specs must not assume accumulated data: the bank feed only exists
+  after an import; the recovered-strip only after decided anomalies.
+  Import a fixture through the product's own pipeline, poll the feed,
+  and write data-conditional assertions.
+- `reporter: "github"` writes no playwright-report/ — the failure
+  artifact upload needs the html reporter if reports are wanted.
+- workflow_dispatch doesn't register until the file exists on the
+  default branch — prove new workflows with a temporary push trigger.
 
 ## Remaining after this session
 - PR #17 review + merge into dev is the human's call.
