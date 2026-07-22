@@ -118,7 +118,7 @@ function BooksPageInner() {
       setError(null);
       setNote(
         `Tally pull (${r.mode}): ${r.invoices_created} receivables + ${r.bills_created} payables in, ` +
-          `${r.invoices_skipped + r.bills_skipped} already known` +
+          `${r.invoices_updated + r.bills_updated} refreshed, ${r.invoices_skipped + r.bills_skipped} unchanged` +
           (r.unclassified_vendors > 0
             ? ` — ${r.unclassified_vendors} vendor(s) need MSME tagging for the Payables Shield.`
             : "."),

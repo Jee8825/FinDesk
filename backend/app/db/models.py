@@ -161,7 +161,10 @@ class Bill(TimestampedTenanted, Base):
     number: Mapped[str] = mapped_column(String(50))
     issue_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    amount_paise: Mapped[int] = mapped_column(BigInteger)
+    amount_paise: Mapped[int] = mapped_column(BigInteger)  # original bill amount
+    # unpaid portion — §16 interest and 43B(h) exposure run on THIS, not the
+    # original; source syncs (Tally) update it on re-pull
+    outstanding_paise: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|paid
     # MSME Act day-zero; falls back to issue_date when not recorded
     acceptance_date: Mapped[datetime | None] = mapped_column(

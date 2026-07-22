@@ -51,7 +51,7 @@ async def sync_books(
             select(Counterparty).where(Counterparty.tenant_id == tenant_id)
         )
     }
-    counts = {"parties_created": 0, "unclassified_vendors": 0}
+    counts = {"parties_created": 0, "unclassified_vendors": 0, "status_conflicts": 0}
 
     async def ensure_party(name: str, kind: str) -> Counterparty:
         party = parties.get(name.lower())
@@ -71,42 +71,73 @@ async def sync_books(
         model = Invoice if side == "receivables" else Bill
         kind = "client" if side == "receivables" else "vendor"
         existing = {
-            row.number
+            row.number: row
             for row in await session.scalars(
                 select(model).where(model.tenant_id == tenant_id)
             )
         }
-        created = skipped = 0
+        created = updated = skipped = 0
         for ref in result.bills:
-            if ref.external_ref in existing:
-                skipped += 1
+            row = existing.get(ref.external_ref)
+            if row is not None:
+                # Re-pull = refresh, with one hard rule: "paid" is terminal
+                # here. Local recon marked it from bank evidence; a stale
+                # export saying otherwise is a disagreement to surface, never
+                # a silent resurrection (the product's conflict ethos).
+                if row.status == "paid" and ref.outstanding_paise > 0:
+                    counts["status_conflicts"] += 1
+                    skipped += 1
+                    continue
+                settled = ref.outstanding_paise == 0
+                changed = False
+                if side == "payables" and row.outstanding_paise != ref.outstanding_paise:
+                    row.outstanding_paise = ref.outstanding_paise
+                    changed = True
+                if settled and row.status != "paid":
+                    row.status = "paid"
+                    changed = True
+                updated += int(changed)
+                skipped += int(not changed)
+                continue
+            if ref.outstanding_paise == 0:
+                skipped += 1  # settled and previously unknown — nothing to book
                 continue
             party = await ensure_party(ref.party, kind)
             if kind == "vendor" and not party.msme_status:
                 counts["unclassified_vendors"] += 1
-            session.add(
-                model(
-                    id=uuid7(),
-                    tenant_id=tenant_id,
-                    counterparty_id=party.id,
-                    number=ref.external_ref,
-                    issue_date=ref.bill_date,
-                    due_date=ref.due_date or ref.bill_date + timedelta(days=30),
-                    acceptance_date=ref.bill_date,
-                    amount_paise=ref.outstanding_paise or ref.amount_paise,
-                    status="open",
-                )
+            fields: dict[str, Any] = dict(
+                id=uuid7(),
+                tenant_id=tenant_id,
+                counterparty_id=party.id,
+                number=ref.external_ref,
+                issue_date=ref.bill_date,
+                due_date=ref.due_date or ref.bill_date + timedelta(days=30),
+                acceptance_date=ref.bill_date,
+                status="open",
             )
-            existing.add(ref.external_ref)
+            if side == "payables":
+                fields |= {
+                    "amount_paise": ref.amount_paise,
+                    "outstanding_paise": ref.outstanding_paise,
+                }
+            else:
+                # Invoice has no outstanding column — the unpaid portion is the
+                # actionable amount for radar/forecast, so it becomes the amount
+                fields |= {"amount_paise": ref.outstanding_paise}
+            obj = model(**fields)
+            session.add(obj)
+            existing[ref.external_ref] = obj  # duplicate refs in one pull hit update path
             created += 1
-        return {"created": created, "skipped": skipped}
+        return {"created": created, "updated": updated, "skipped": skipped}
 
     inv = await upsert("receivables", receivables)
     pay = await upsert("payables", payables)
     return {
         "invoices_created": inv["created"],
+        "invoices_updated": inv["updated"],
         "invoices_skipped": inv["skipped"],
         "bills_created": pay["created"],
+        "bills_updated": pay["updated"],
         "bills_skipped": pay["skipped"],
         **counts,
         "fetched_at": datetime.now(UTC).isoformat(),

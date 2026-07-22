@@ -8,8 +8,9 @@
 > (invoice acceptance dates + statutory clocks) `0008` (versioned
 > forecasts + lines) `0009` (working-capital actions) `0010`
 > (enforcer last_enforced_level) `0011` (hot-path indexes + partial
-> unique committed-match guard) and `0012` (bills — buyer-side payables for
-> §15/43B(h) compliance, mirroring invoices) are live. Tables carry the subset of
+> unique committed-match guard) `0012` (bills — buyer-side payables for
+> §15/43B(h) compliance, mirroring invoices) and `0013` (bills.outstanding_paise
+> — exposure runs on the unpaid portion; source syncs refresh it) are live. Tables carry the subset of
 > columns their shipped features need (e.g. `invoices` gains gst/tds/irn in
 > Phase 3); this file describes the target shape.
 

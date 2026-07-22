@@ -340,11 +340,16 @@ class TallySyncOut(BaseModel):
     mode: str  # fixture | live — demo data never masquerades as a live pull
     period: str
     invoices_created: int
+    invoices_updated: int
     invoices_skipped: int
     bills_created: int
+    bills_updated: int
     bills_skipped: int
     parties_created: int
     unclassified_vendors: int
+    # rows where a stale export disagreed with locally-evidenced "paid" —
+    # surfaced, never silently overwritten
+    status_conflicts: int
 
 
 @router.post("/books/imports/tally", response_model=TallySyncOut)

@@ -264,6 +264,7 @@ export type PayableItem = {
   vendor: string;
   msme_status: string;
   amount_paise: number;
+  outstanding_paise: number;
   clock: {
     statutory_due_date: string;
     day_count: number;
@@ -478,11 +479,14 @@ export const api = {
       mode: "fixture" | "live";
       period: string;
       invoices_created: number;
+      invoices_updated: number;
       invoices_skipped: number;
       bills_created: number;
+      bills_updated: number;
       bills_skipped: number;
       parties_created: number;
       unclassified_vendors: number;
+      status_conflicts: number;
     }>("POST", apiPaths.POST_BOOKS_IMPORTS_TALLY),
   me: () =>
     request<{

@@ -65,8 +65,19 @@ def test_bills_payable_uses_payable_report_and_parses():
     assert [b.party for b in result.bills] == [
         "Sundaram Packaging (Udyam MSE)",
         "Vega Logistics Pvt Ltd",
+        "Sundaram Packaging (Udyam MSE)",
     ]
     assert result.bills[0].outstanding_paise == 5_230_000
+
+
+def test_settled_bill_flows_through_as_zero_outstanding():
+    # BILLOP present + BILLCL 0 = Tally saying "this settled" — the sync layer
+    # needs that signal, so the gateway must not swallow it
+    gw = TallyGateway(transport=fixture_transport("bills_payable.xml"))
+    settled = gw.list_bills("2026-04-01", "2026-07-22").bills[2]
+    assert settled.external_ref == "PB-870"
+    assert settled.amount_paise == 6_400_000
+    assert settled.outstanding_paise == 0
 
 
 def test_chart_of_accounts_guid_and_name_fallback():

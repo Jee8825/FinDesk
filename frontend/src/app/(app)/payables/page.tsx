@@ -43,7 +43,10 @@ function BillRow({ item }: { item: PayableItem }) {
         </p>
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-right font-mono font-semibold text-dark-text">
-        {formatINRCompact(item.amount_paise)}
+        {formatINRCompact(item.outstanding_paise)}
+        {item.outstanding_paise < item.amount_paise && (
+          <p className="mono-annot mt-0.5">of {formatINRCompact(item.amount_paise)}</p>
+        )}
       </td>
       <td
         className={`px-5 py-4 text-right font-mono text-lg font-bold ${breached ? "text-blush" : "text-mint"}`}

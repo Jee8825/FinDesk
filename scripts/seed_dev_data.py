@@ -278,6 +278,7 @@ async def ensure_bills(session, tenant_id: str) -> None:
                 issue_date=issue_dt,
                 due_date=issue_dt + timedelta(days=45),
                 amount_paise=amount_paise,
+                outstanding_paise=amount_paise,
                 status="open",
             )
         )
