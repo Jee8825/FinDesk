@@ -20,7 +20,9 @@ test("palette finds a transaction and jumps to its Why? drawer", async ({ page }
   await expect(input).toBeVisible();
 
   await input.fill("BLUE TOKAI");
-  const hit = page.getByText("NEFT-BLUE TOKAI COFFEE-PAYMENT AUG").first();
+  // narration varies by which statements are loaded (AUG locally, INV041
+  // in CI's imported fixture) — any Blue Tokai row proves the jump
+  const hit = page.getByText(/NEFT-BLUE TOKAI COFFEE/).first();
   await expect(hit).toBeVisible({ timeout: 10_000 });
   await hit.click();
 

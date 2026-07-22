@@ -71,6 +71,27 @@ jobs:
             curl -sf http://localhost:8080/healthz && break; sleep 2; done
           curl -sf http://localhost:8080/healthz
 
+      - name: Import fixture statement (the product's own ingestion path)
+        run: |
+          TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"founder@demo.findesk.in","password":"demo1234"}' \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          curl -sf -X POST localhost:8080/api/v1/books/imports \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "file=@scripts/fixtures/statement_apr2026.csv"
+          echo "waiting for the worker to reconcile the feed…"
+          N=0
+          for i in $(seq 1 45); do
+            N=$(curl -s localhost:8080/api/v1/books/transactions \
+              -H "Authorization: Bearer $TOKEN" \
+              | python3 -c "import sys,json;print(len(json.load(sys.stdin).get('items',[])))" 2>/dev/null || echo 0)
+            [ "$N" -gt 0 ] && break
+            sleep 2
+          done
+          echo "feed rows: $N"
+          [ "$N" -gt 0 ]
+
       - name: Install frontend + browsers
         working-directory: frontend
         run: |
