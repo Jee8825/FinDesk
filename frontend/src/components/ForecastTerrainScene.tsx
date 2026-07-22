@@ -279,7 +279,11 @@ function SceneInner({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
 
 export default function ForecastTerrainScene({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) {
   return (
-    <div className="mt-4 h-[340px] w-full overflow-hidden rounded-glass border border-line2 bg-[#04070d]">
+    <div
+      role="img"
+      aria-label="Interactive 3D cash terrain: 13-week scenario landscape with the \u20b90 waterline"
+      className="mt-4 h-[340px] w-full overflow-hidden rounded-glass border border-line2 bg-[#04070d]"
+    >
       <Canvas dpr={[1, 2]} camera={{ position: [7.5, 5.5, 9.5], fov: 42 }}>
         <SceneInner f={f} whatif={whatif} />
       </Canvas>

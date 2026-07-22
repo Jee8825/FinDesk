@@ -19,7 +19,7 @@ const config: Config = {
         // text
         ink: "#edf1fa", // primary text (inverted from paper era)
         mute: "#a6adc4", // secondary
-        faint: "#6c7490", // tertiary
+        faint: "#7d86a6", // tertiary (AA on glass: 4.7:1)
         annot: "#596180", // mono annotations
         // brand + status (lifted for dark AA)
         accent: { DEFAULT: "#ffa028", soft: "#ffc26e" }, // FinDesk amber

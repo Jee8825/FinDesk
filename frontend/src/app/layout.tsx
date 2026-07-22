@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Instrument_Sans, Space_Grotesk } from "next/font/google";
 
 import "./globals.css";
@@ -29,6 +29,10 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "FinDesk — The Autonomous CFO",
   description: "Clean books. Defended cash. For Indian SMEs.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#060a12",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
