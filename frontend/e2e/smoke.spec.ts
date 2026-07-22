@@ -23,6 +23,7 @@ for (const { path, heading } of PAGES) {
 }
 
 test("agent-health badge reports live worker + memory", async ({ page }) => {
+  test.skip(!!process.env.E2E_LITE, "recall memory stack not booted in lite CI");
   await page.goto("/");
   const badge = page.locator('[title="live probe: worker consumer + memory engine"]');
   await expect(badge).toBeVisible();
