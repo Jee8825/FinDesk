@@ -42,7 +42,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
             <button
               onClick={onClose}
               aria-label="close"
-              className="rounded-lg border border-line p-2 text-mute transition-colors hover:bg-white/[0.06]"
+              className="rounded-lg border border-line p-2 text-mute transition-colors hover:bg-[var(--fill-3)]"
             >
               <X size={14} />
             </button>
@@ -55,7 +55,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
           {trail.isLoading && (
             <div className="mt-6 space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-16 animate-pulse rounded-xl bg-white/[0.05]" />
+                <div key={i} className="h-16 animate-pulse rounded-xl bg-[var(--fill-2)]" />
               ))}
             </div>
           )}

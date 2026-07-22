@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 
 test("forecast shows the 3D terrain canvas with orbit hint", async ({ page }) => {
   await page.goto("/forecast");
-  await expect(page.getByText(/drag to orbit/)).toBeVisible({ timeout: 15_000 });
+  // generous: first hit after a dev-server restart compiles three.js
+  await expect(page.getByText(/drag to orbit/)).toBeVisible({ timeout: 45_000 });
   const canvas = page.locator("canvas").last();
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();

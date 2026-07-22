@@ -63,7 +63,7 @@ function Sparkline({ points }: { points: number[] }) {
     .join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="13-week base case sparkline">
-      <path d={d} fill="none" stroke="#ffa028" strokeWidth="2" strokeLinecap="round" />
+      <path d={d} fill="none" stroke="var(--chart-base)" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

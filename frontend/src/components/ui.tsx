@@ -110,7 +110,7 @@ export function StatCard({
 }
 
 const PILL_TONES: Record<string, string> = {
-  neutral: "bg-white/[0.04] text-mute border border-line2",
+  neutral: "bg-[var(--fill-2)] text-mute border border-line2",
   good: "bg-moss/10 text-mint border border-moss/30",
   warn: "bg-accent/10 text-accent-soft border border-accent/30",
   bad: "bg-claret/10 text-blush border border-claret/30",
@@ -152,7 +152,7 @@ export function Bar({
     memory: "bg-memory",
   };
   return (
-    <div className={`h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07] ${className}`}>
+    <div className={`h-1.5 w-full overflow-hidden rounded-full bg-[var(--fill-3)] ${className}`}>
       <motion.div
         className={`h-full rounded-full ${fills[tone]}`}
         initial={{ width: 0 }}
@@ -174,7 +174,7 @@ export function PrimaryBtn(props: HTMLMotionProps<"button">) {
     <motion.button
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.97 }}
-      className={`${btnBase} bg-accent text-[#1a1204] shadow-[0_12px_28px_-10px_rgba(255,160,40,0.55)] hover:bg-accent-soft ${className}`}
+      className={`${btnBase} bg-accent text-[var(--accent-contrast)] shadow-[0_12px_28px_-10px_rgba(255,160,40,0.45)] hover:bg-accent-soft ${className}`}
       {...rest}
     />
   );
@@ -272,7 +272,7 @@ export function PageShell({
 /* ----------------------------------------------------------- data states */
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-glass bg-white/[0.05] ${className}`} />;
+  return <div className={`animate-pulse rounded-glass bg-[var(--fill-2)] ${className}`} />;
 }
 
 export function EmptyState({

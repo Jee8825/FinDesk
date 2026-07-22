@@ -9,33 +9,34 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // canvas layers (was: warm paper)
-        paper: "#060a12", // page void
-        cream: "#0c1120", // shell / header glass fallback
-        cream2: "#0a0e1a", // shell gradient end
-        card: "#101527", // raised glass base
-        line: "rgba(148,163,204,0.16)", // hairline on glass
-        line2: "rgba(148,163,204,0.09)", // faint hairline
-        // text
-        ink: "#edf1fa", // primary text (inverted from paper era)
-        mute: "#a6adc4", // secondary
-        faint: "#7d86a6", // tertiary (AA on glass: 4.7:1)
-        annot: "#596180", // mono annotations
-        // brand + status (lifted for dark AA)
-        accent: { DEFAULT: "#ffa028", soft: "#ffc26e" }, // FinDesk amber
-        moss: "#43d695", // success
-        mint: "#7defc0", // success bright / on-glass
-        claret: "#ff6e66", // danger
-        blush: "#ff9c96", // danger soft
-        memory: "#7ba3e8", // memory / belief blue
+        // Every value is a CSS var — :root carries dark, [data-theme="light"]
+        // overrides in globals.css. Triplet vars keep /alpha utilities working.
+        paper: "rgb(var(--c-paper) / <alpha-value>)",
+        cream: "rgb(var(--c-cream) / <alpha-value>)",
+        cream2: "rgb(var(--c-cream2) / <alpha-value>)",
+        card: "rgb(var(--c-card) / <alpha-value>)",
+        line: "var(--c-line)", // baked alpha per theme
+        line2: "var(--c-line2)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        mute: "rgb(var(--c-mute) / <alpha-value>)",
+        faint: "rgb(var(--c-faint) / <alpha-value>)",
+        annot: "rgb(var(--c-annot) / <alpha-value>)",
+        accent: {
+          DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
+          soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
+        },
+        moss: "rgb(var(--c-moss) / <alpha-value>)",
+        mint: "rgb(var(--c-mint) / <alpha-value>)",
+        claret: "rgb(var(--c-claret) / <alpha-value>)",
+        blush: "rgb(var(--c-blush) / <alpha-value>)",
+        memory: "rgb(var(--c-memory) / <alpha-value>)",
         dark: {
-          // deeper-elevation namespace (kept for existing pages)
-          bg: "#04070d",
-          card: "#0d1222",
-          card2: "#131a30",
-          line: "rgba(148,163,204,0.14)",
-          text: "#edf1fa",
-          mute: "#8790aa",
+          bg: "rgb(var(--c-deep-bg) / <alpha-value>)",
+          card: "rgb(var(--c-deep-card) / <alpha-value>)",
+          card2: "rgb(var(--c-deep-card2) / <alpha-value>)",
+          line: "var(--c-line)",
+          text: "rgb(var(--c-ink) / <alpha-value>)",
+          mute: "rgb(var(--c-deep-mute) / <alpha-value>)",
         },
         // legacy alias (pre-redesign pages) — keep until fully retired
         "teal-brand": "#2dd4bf",

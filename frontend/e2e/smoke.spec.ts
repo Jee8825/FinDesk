@@ -55,3 +55,18 @@ test("/brief composes the daily digest", async ({ page }) => {
   await expect(page.getByText(/who owes you/)).toBeVisible();
   await expect(page.getByText("while you were away")).toBeVisible();
 });
+
+test("light theme toggles from settings and persists", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByText("appearance")).toBeVisible();
+
+  await page.getByRole("button", { name: "Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // back to the void — and the attribute is gone entirely
+  await page.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+});

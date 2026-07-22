@@ -135,7 +135,7 @@ export default function ReconciliationPage() {
         </motion.div>
 
         {runId && (
-          <div className="mt-5 max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-white/[0.05] p-4">
+          <div className="mt-5 max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-[var(--fill-2)] p-4">
             {events.map((evt, i) => (
               <motion.div
                 key={i}

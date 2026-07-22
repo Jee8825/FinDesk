@@ -35,7 +35,7 @@ export function Aura({
   return (
     <div
       aria-hidden
-      className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}
+      className={`fx-aura pointer-events-none absolute inset-0 overflow-hidden ${className}`}
       style={{ opacity }}
     >
       <MeshGradient

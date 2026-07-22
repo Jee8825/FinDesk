@@ -164,7 +164,7 @@ export function CommandPalette() {
                   key={p.href}
                   value={`go ${p.label} ${p.hint}`}
                   onSelect={() => go(p.href)}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-mute aria-selected:bg-white/[0.07] aria-selected:text-ink"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-mute aria-selected:bg-[var(--fill-3)] aria-selected:text-ink"
                 >
                   <BookOpen size={15} className="text-faint" />
                   <span className="font-semibold">{p.label}</span>
@@ -182,7 +182,7 @@ export function CommandPalette() {
                   key={a.graph}
                   value={`run ${a.label} ${a.hint}`}
                   onSelect={() => runAgent(a.graph, a.label)}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-mute aria-selected:bg-white/[0.07] aria-selected:text-ink"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-mute aria-selected:bg-[var(--fill-3)] aria-selected:text-ink"
                 >
                   <span className="text-accent">{a.icon}</span>
                   <span className="font-semibold">{a.label}</span>
@@ -201,7 +201,7 @@ export function CommandPalette() {
                     key={t.id}
                     value={`txn ${t.narration} ${t.counterparty_hint ?? ""} ${t.match_status}`}
                     onSelect={() => go(`/books?why=${t.id}`)}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-mute aria-selected:bg-white/[0.07] aria-selected:text-ink"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-mute aria-selected:bg-[var(--fill-3)] aria-selected:text-ink"
                   >
                     <ArrowRight size={13} className="text-faint" />
                     <span className="truncate">{t.narration}</span>

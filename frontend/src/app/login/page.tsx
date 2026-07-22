@@ -17,7 +17,7 @@ const PROMISES = [
 ];
 
 const inputCls =
-  "mt-1.5 w-full rounded-lg border border-line bg-white/[0.04] px-3 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/70 focus:bg-white/[0.06]";
+  "mt-1.5 w-full rounded-lg border border-line bg-[var(--fill-2)] px-3 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/70 focus:bg-[var(--fill-3)]";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -95,7 +95,7 @@ export default function LoginPage() {
             whileTap={{ scale: 0.97 }}
             type="submit"
             disabled={busy}
-            className="mt-6 w-full rounded-lg bg-accent px-3 py-2.5 text-sm font-bold text-[#1a1204] shadow-[0_14px_32px_-10px_rgba(255,160,40,0.6)] transition-colors hover:bg-accent-soft disabled:opacity-50"
+            className="mt-6 w-full rounded-lg bg-accent px-3 py-2.5 text-sm font-bold text-[var(--accent-contrast)] shadow-[0_14px_32px_-10px_rgba(255,160,40,0.6)] transition-colors hover:bg-accent-soft disabled:opacity-50"
           >
             {busy ? "Signing in…" : "Sign in"}
           </motion.button>

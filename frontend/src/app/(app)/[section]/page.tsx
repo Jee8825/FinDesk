@@ -18,7 +18,7 @@ export default function SectionPlaceholder({ params }: { params: { section: stri
       <h1 className="text-2xl font-bold text-ink">{meta.title}</h1>
       <div className="mt-6 max-w-xl rounded-2xl border-2 border-dashed border-line p-12 text-center">
         <p className="text-sm text-faint">{meta.blurb}</p>
-        <p className="mono-label mt-3 inline-block rounded-full border border-line bg-white/[0.05] px-3 py-1.5 text-mute">
+        <p className="mono-label mt-3 inline-block rounded-full border border-line bg-[var(--fill-2)] px-3 py-1.5 text-mute">
           arrives in {meta.phase}
         </p>
       </div>

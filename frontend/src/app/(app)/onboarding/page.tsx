@@ -39,8 +39,8 @@ function StepDot({ index, current }: { index: number; current: number }) {
           done
             ? "bg-moss text-[#06130c]"
             : active
-              ? "bg-accent text-[#1a1204] shadow-[0_8px_20px_-8px_rgba(255,160,40,0.8)]"
-              : "border-2 border-line bg-white/[0.05] text-faint"
+              ? "bg-accent text-[var(--accent-contrast)] shadow-[0_8px_20px_-8px_rgba(255,160,40,0.6)]"
+              : "border-2 border-line bg-[var(--fill-2)] text-faint"
         }`}
       >
         {done ? <Check size={14} /> : index + 1}
@@ -221,7 +221,7 @@ export default function OnboardingPage() {
                   Planner → Executor → Critic, live. Anything ambiguous waits for you in the
                   queues — nothing consequential commits without approval.
                 </p>
-                <div className="mt-5 max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-white/[0.05] p-4">
+                <div className="mt-5 max-h-64 space-y-1.5 overflow-y-auto rounded-xl border border-line2 bg-[var(--fill-2)] p-4">
                   {events.map((evt, i) => (
                     <motion.div
                       key={i}

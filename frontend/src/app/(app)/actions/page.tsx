@@ -91,7 +91,7 @@ function HeroAction({ action }: { action: WcAction }) {
           ) : (
             <Link
               href="/receivables"
-              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-[#1a1204] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
+              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-[var(--accent-contrast)] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
             >
               Open radar →
             </Link>

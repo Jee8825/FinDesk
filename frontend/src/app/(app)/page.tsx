@@ -43,16 +43,16 @@ function ProjectionChart({ f }: { f: ForecastOut }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 w-full" role="img" aria-label="base-case cash projection">
       <motion.path
         d={area}
-        fill="#ffa028"
+        fill="var(--chart-base)"
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.09 }}
         transition={{ duration: 1 }}
       />
-      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="rgba(148,163,204,0.35)" strokeDasharray="4 4" strokeWidth="1" />
+      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="var(--chart-grid)" strokeDasharray="4 4" strokeWidth="1" />
       <motion.path
         d={line}
         fill="none"
-        stroke="#ffa028"
+        stroke="var(--chart-base)"
         strokeWidth="2.5"
         strokeLinecap="round"
         initial={{ pathLength: 0 }}
@@ -66,7 +66,7 @@ function ProjectionChart({ f }: { f: ForecastOut }) {
           cy={y(w.closing_paise)}
           r="3"
           fill="#fcf9f2"
-          stroke="#ffa028"
+          stroke="var(--chart-base)"
           strokeWidth="2"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}

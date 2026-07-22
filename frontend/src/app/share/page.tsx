@@ -37,13 +37,13 @@ function SharedRoom() {
             </div>
           </div>
           {room.data?.shared && (
-            <span className="mono-label rounded-full border border-line bg-white/[0.05] px-3 py-1.5 text-mute">
+            <span className="mono-label rounded-full border border-line bg-[var(--fill-2)] px-3 py-1.5 text-mute">
               expires {new Date(room.data.shared.expires_at * 1000).toLocaleDateString("en-IN")}
             </span>
           )}
         </div>
         {!token && <p className="text-sm text-faint">Missing share token.</p>}
-        {room.isLoading && <div className="h-64 animate-pulse rounded-2xl bg-white/[0.05]" />}
+        {room.isLoading && <div className="h-64 animate-pulse rounded-2xl bg-[var(--fill-2)]" />}
         {room.isError && (
           <p className="text-sm text-claret">This share link is invalid or has expired.</p>
         )}

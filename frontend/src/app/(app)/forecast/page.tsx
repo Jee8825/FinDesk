@@ -56,24 +56,24 @@ function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
             x2={x(f.gap.week)}
             y1={PAD}
             y2={H - PAD}
-            stroke="#ff6e66"
+            stroke="var(--chart-danger)"
             strokeWidth="1"
             strokeDasharray="4 4"
           />
-          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="#ff6e66" fontFamily="var(--font-plex-mono)">
+          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="var(--chart-danger)" fontFamily="var(--font-plex-mono)">
             W{f.gap.week} GAP {formatINRCompact(f.gap.shortfall_paise)}
           </text>
         </>
       )}
-      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="rgba(148,163,204,0.3)" strokeDasharray="4 4" strokeWidth="1" />
-      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="#6c7490" fontFamily="var(--font-plex-mono)">₹0</text>
+      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="var(--chart-grid)" strokeDasharray="4 4" strokeWidth="1" />
+      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="var(--chart-text)" fontFamily="var(--font-plex-mono)">₹0</text>
       {band && (
-        <motion.path d={band} fill="#ffa028" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
+        <motion.path d={band} fill="var(--chart-base)" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
       )}
       <motion.path
         d={path(up)}
         fill="none"
-        stroke="#2dd4bf"
+        stroke="var(--chart-up)"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -83,7 +83,7 @@ function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
       <motion.path
         d={path(down)}
         fill="none"
-        stroke="#a78bfa"
+        stroke="var(--chart-down)"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -93,7 +93,7 @@ function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
       <motion.path
         d={path(base)}
         fill="none"
-        stroke="#ffa028"
+        stroke="var(--chart-base)"
         strokeWidth="2.5"
         strokeLinecap="round"
         initial={{ pathLength: 0 }}
@@ -116,8 +116,8 @@ function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
           cx={x(w.week)}
           cy={y(w.closing_paise)}
           r="3"
-          fill="#101527"
-          stroke="#ffa028"
+          fill="var(--chart-dot)"
+          stroke="var(--chart-base)"
           strokeWidth="2"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -129,7 +129,7 @@ function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) 
           cx={x(f.gap.week)}
           cy={y(Math.min(...(down.length ? down : base).map((w) => w.closing_paise)))}
           r="5"
-          fill="#ff6e66"
+          fill="var(--chart-danger)"
           initial={{ scale: 0 }}
           animate={{ scale: [0, 1.4, 1] }}
           transition={{ delay: 1.2, duration: 0.5 }}
@@ -410,7 +410,7 @@ function ForecastPageInner() {
                 <motion.span
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-[#1a1204] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-[var(--accent-contrast)] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
                 >
                   See WC actions →
                 </motion.span>

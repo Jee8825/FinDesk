@@ -12,7 +12,7 @@ import type { ForecastOut, ForecastWeek } from "@/lib/api";
 const TerrainScene = dynamic(() => import("./ForecastTerrainScene"), {
   ssr: false,
   loading: () => (
-    <div className="mt-4 grid h-[340px] w-full place-items-center rounded-glass bg-white/[0.03]">
+    <div className="mt-4 grid h-[340px] w-full place-items-center rounded-glass bg-[var(--fill-1)]">
       <span className="mono-label animate-pulse text-faint">building terrain…</span>
     </div>
   ),
@@ -44,7 +44,7 @@ export function ForecastTerrain({
   }, []);
 
   if (mode === "pending") {
-    return <div className="mt-4 h-[340px] w-full animate-pulse rounded-glass bg-white/[0.03]" />;
+    return <div className="mt-4 h-[340px] w-full animate-pulse rounded-glass bg-[var(--fill-1)]" />;
   }
   if (mode === "2d") return <>{fallback}</>;
 

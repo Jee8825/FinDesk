@@ -2,8 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
-html {
+/* ---- theme tokens: dark is the root, light overrides -------------- */
+:root {
   color-scheme: dark;
+  --c-paper: 6 10 18;
+  --c-cream: 12 17 32;
+  --c-cream2: 10 14 26;
+  --c-card: 16 21 39;
+  --c-line: rgba(148, 163, 204, 0.16);
+  --c-line2: rgba(148, 163, 204, 0.09);
+  --c-ink: 237 241 250;
+  --c-mute: 166 173 196;
+  --c-faint: 125 134 166;
+  --c-annot: 89 97 128;
+  --c-accent: 255 160 40;
+  --c-accent-soft: 255 194 110;
+  --accent-contrast: #1a1204;
+  --c-moss: 67 214 149;
+  --c-mint: 125 239 192;
+  --c-claret: 255 110 102;
+  --c-blush: 255 156 150;
+  --c-memory: 123 163 232;
+  --c-deep-bg: 4 7 13;
+  --c-deep-card: 13 18 34;
+  --c-deep-card2: 19 26 48;
+  --c-deep-mute: 135 144 170;
+  --fill-1: rgba(255, 255, 255, 0.03);
+  --fill-2: rgba(255, 255, 255, 0.05);
+  --fill-3: rgba(255, 255, 255, 0.07);
+  --chart-base: #ffa028;
+  --chart-up: #2dd4bf;
+  --chart-down: #a78bfa;
+  --chart-danger: #ff6e66;
+  --chart-grid: rgba(148, 163, 204, 0.3);
+  --chart-text: #7d86a6;
+  --chart-dot: #101527;
+}
+
+/* light: the ledger-paper heritage returns under the glass */
+[data-theme="light"] {
+  color-scheme: light;
+  --c-paper: 241 236 223;
+  --c-cream: 251 248 241;
+  --c-cream2: 244 239 228;
+  --c-card: 251 248 241;
+  --c-line: rgba(35, 41, 60, 0.16);
+  --c-line2: rgba(35, 41, 60, 0.09);
+  --c-ink: 35 41 60;
+  --c-mute: 77 85 112;
+  --c-faint: 102 111 142;
+  --c-annot: 102 111 142;
+  --c-accent: 194 65 12;
+  --c-accent-soft: 180 83 9;
+  --accent-contrast: #ffffff;
+  --c-moss: 23 122 76;
+  --c-mint: 10 122 80;
+  --c-claret: 192 57 47;
+  --c-blush: 168 58 50;
+  --c-memory: 60 98 170;
+  --c-deep-bg: 231 224 206;
+  --c-deep-card: 244 239 228;
+  --c-deep-card2: 236 230 214;
+  --c-deep-mute: 90 98 128;
+  --fill-1: rgba(35, 41, 60, 0.04);
+  --fill-2: rgba(35, 41, 60, 0.06);
+  --fill-3: rgba(35, 41, 60, 0.09);
+  --chart-base: #c2410c;
+  --chart-up: #0f766e;
+  --chart-down: #6d28d9;
+  --chart-danger: #c0392f;
+  --chart-grid: rgba(35, 41, 60, 0.25);
+  --chart-text: #666f8e;
+  --chart-dot: #fbf8f1;
 }
 
 body {
@@ -12,6 +82,45 @@ body {
     radial-gradient(1200px 800px at 80% -10%, rgba(109, 40, 217, 0.08), transparent 60%),
     radial-gradient(1000px 700px at -10% 110%, rgba(14, 116, 144, 0.07), transparent 60%);
   background-attachment: fixed;
+}
+
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(1200px 800px at 80% -10%, rgba(124, 58, 237, 0.06), transparent 60%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(14, 165, 183, 0.05), transparent 60%);
+}
+
+/* light glass: white panes over paper, same anatomy */
+[data-theme="light"] .glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.45)),
+    rgba(251, 248, 241, 0.6);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(35, 41, 60, 0.08),
+    0 18px 40px -24px rgba(97, 84, 55, 0.35);
+}
+[data-theme="light"] .glass-strong {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.7)),
+    rgba(251, 248, 241, 0.8);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 1px rgba(35, 41, 60, 0.1),
+    0 24px 48px -28px rgba(97, 84, 55, 0.4);
+}
+[data-theme="light"] .glass-rail {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.55)),
+    rgba(244, 239, 228, 0.7);
+}
+[data-theme="light"] .fx-aura {
+  opacity: 0.3 !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(35, 41, 60, 0.25);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::selection {

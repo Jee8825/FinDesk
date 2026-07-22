@@ -56,7 +56,7 @@ export default function ReportsPage() {
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="rounded-lg border border-line bg-white/[0.05] px-3 py-2 text-sm font-semibold text-ink outline-none"
+          className="rounded-lg border border-line bg-[var(--fill-2)] px-3 py-2 text-sm font-semibold text-ink outline-none"
           aria-label="report period"
         >
           {PERIODS.map((p) => (
@@ -103,7 +103,7 @@ export default function ReportsPage() {
                     <motion.tr
                       key={c.category_code}
                       variants={{ initial: { opacity: 0 }, animate: { opacity: 1 } }}
-                      className="border-b border-line2/70 last:border-0 hover:bg-white/[0.06]"
+                      className="border-b border-line2 last:border-0 hover:bg-[var(--fill-3)]"
                     >
                       <td className="px-6 py-3 font-semibold text-ink">{c.category_name}</td>
                       <td className="whitespace-nowrap px-6 py-3 text-right font-mono font-semibold text-ink">
@@ -138,7 +138,7 @@ export default function ReportsPage() {
                   <table className="mt-1.5 w-full text-sm">
                     <tbody>
                       {bucket.items.map((item) => (
-                        <tr key={item.invoice_number} className="border-b border-line2/60 last:border-0">
+                        <tr key={item.invoice_number} className="border-b border-line2 last:border-0">
                           <td className="py-2 font-semibold text-ink">{item.client}</td>
                           <td className="py-2 font-mono text-xs text-faint">{item.invoice_number}</td>
                           <td className="py-2 text-right font-mono font-semibold">{formatINR(item.amount_paise)}</td>

@@ -106,7 +106,7 @@ function TopCard({ conflict, index, total }: { conflict: ConflictCard; index: nu
           whileTap={{ scale: 0.97 }}
           disabled={resolve.isPending}
           onClick={() => resolve.mutate("b")}
-          className="rounded-xl bg-accent px-4 py-3 text-sm font-bold text-[#1a1204] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft disabled:opacity-50"
+          className="rounded-xl bg-accent px-4 py-3 text-sm font-bold text-[var(--accent-contrast)] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft disabled:opacity-50"
         >
           Accept the new observation
         </motion.button>

@@ -119,7 +119,7 @@ function TenantCard() {
               <li key={m.tenant_id}>
                 <button
                   onClick={() => switchTo(m.tenant_id)}
-                  className={`block w-full px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.06] ${
+                  className={`block w-full px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--fill-3)] ${
                     m.tenant_id === me.data!.active_tenant_id
                       ? "font-semibold text-ink"
                       : "text-mute"
@@ -240,7 +240,7 @@ function Sidebar() {
               new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }),
             )
           }
-          className="mt-3 flex w-full items-center justify-between rounded-lg border border-line2 bg-white/[0.03] px-2.5 py-2 text-left text-xs text-faint transition-colors hover:border-line hover:text-mute"
+          className="mt-3 flex w-full items-center justify-between rounded-lg border border-line2 bg-[var(--fill-1)] px-2.5 py-2 text-left text-xs text-faint transition-colors hover:border-line hover:text-mute"
         >
           <span>Search & command…</span>
           <kbd className="mono-label rounded border border-line2 px-1.5 py-0.5">⌘K</kbd>
@@ -293,7 +293,7 @@ function Sidebar() {
             clearTokens();
             router.replace("/login");
           }}
-          className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-faint transition-colors hover:bg-white/[0.06] hover:text-ink"
+          className="mt-3 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-faint transition-colors hover:bg-[var(--fill-3)] hover:text-ink"
         >
           <LogOut size={12} /> Sign out
         </button>
