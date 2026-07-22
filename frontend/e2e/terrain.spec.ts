@@ -28,3 +28,11 @@ test("scenario sandbox morphs the forecast server-side", async ({ page }) => {
   await page.getByRole("button", { name: "reset" }).click();
   await expect(page.getByText("Horizon ends")).not.toBeVisible();
 });
+
+test("sandbox scenarios are deep-linkable via URL", async ({ page }) => {
+  await page.goto("/forecast?delay=28&burn=8");
+  // sliders hydrate from the URL and the server answer renders
+  await expect(page.getByText("Horizon ends")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel("collection delay days")).toHaveValue("28");
+  await expect(page.getByLabel("extra monthly outflow lakh")).toHaveValue("8");
+});

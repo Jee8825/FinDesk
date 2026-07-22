@@ -17,8 +17,10 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { ForecastTerrain } from "@/components/ForecastTerrain";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+
 import { api, formatINR, formatINRCompact, type ForecastOut, type ForecastWeek } from "@/lib/api";
-import { useEffect, useState } from "react";
 
 const W = 720;
 const H = 260;
@@ -143,9 +145,13 @@ function SandboxCard({
 }: {
   onWhatif: (weeks: ForecastWeek[] | undefined) => void;
 }) {
-  const [delay, setDelay] = useState(0);
-  const [haircut, setHaircut] = useState(0);
-  const [extra, setExtra] = useState(0);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const num = (k: string, max: number) =>
+    Math.max(0, Math.min(max, Number(searchParams.get(k)) || 0));
+  const [delay, setDelay] = useState(() => num("delay", 60));
+  const [haircut, setHaircut] = useState(() => num("cut", 50));
+  const [extra, setExtra] = useState(() => num("burn", 20));
   const dirty = delay !== 0 || haircut !== 0 || extra !== 0;
 
   const [debounced, setDebounced] = useState({ delay, haircut, extra });
@@ -153,6 +159,15 @@ function SandboxCard({
     const t = setTimeout(() => setDebounced({ delay, haircut, extra }), 300);
     return () => clearTimeout(t);
   }, [delay, haircut, extra]);
+
+  // scenarios are shareable: the URL mirrors the debounced sliders
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (debounced.delay) q.set("delay", String(debounced.delay));
+    if (debounced.haircut) q.set("cut", String(debounced.haircut));
+    if (debounced.extra) q.set("burn", String(debounced.extra));
+    router.replace(q.size ? `/forecast?${q}` : "/forecast", { scroll: false });
+  }, [debounced, router]);
 
   const q = useQuery({
     queryKey: ["whatif", debounced],
@@ -275,7 +290,7 @@ function SandboxCard({
   );
 }
 
-export default function ForecastPage() {
+function ForecastPageInner() {
   const queryClient = useQueryClient();
   const forecast = useQuery({ queryKey: ["forecast"], queryFn: () => api.forecast(), retry: false });
   const refresh = useMutation({
@@ -405,5 +420,13 @@ export default function ForecastPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+export default function ForecastPage() {
+  return (
+    <Suspense fallback={null}>
+      <ForecastPageInner />
+    </Suspense>
   );
 }
