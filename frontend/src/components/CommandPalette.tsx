@@ -21,6 +21,7 @@ import { api, formatINR } from "@/lib/api";
 
 const PAGES: Array<{ href: string; label: string; hint: string }> = [
   { href: "/", label: "Dashboard", hint: "cash position, runway, live agent feed" },
+  { href: "/brief", label: "Daily Brief", hint: "your morning front page" },
   { href: "/books", label: "Transactions", hint: "normalized feed, match states" },
   { href: "/reconciliation", label: "Reconciliation", hint: "match queue" },
   { href: "/categorization", label: "Categorization", hint: "rules + memory" },

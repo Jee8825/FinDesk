@@ -155,7 +155,13 @@ function Sidebar() {
   const counts = useQueueCounts(true);
 
   const groups: NavGroup[] = [
-    { label: "Overview", items: [{ href: "/", label: "Dashboard" }] },
+    {
+      label: "Overview",
+      items: [
+        { href: "/", label: "Dashboard" },
+        { href: "/brief", label: "Daily Brief" },
+      ],
+    },
     {
       label: "Books",
       items: [

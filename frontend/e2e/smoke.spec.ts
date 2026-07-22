@@ -47,3 +47,11 @@ test("CA roster lists both seeded tenants", async ({ page }) => {
   await expect(page.getByText("Demo Trading Co").first()).toBeVisible();
   await expect(page.getByText("Meridian Textiles Co").first()).toBeVisible();
 });
+
+test("/brief composes the daily digest", async ({ page }) => {
+  await page.goto("/brief");
+  await expect(page.getByRole("heading", { name: "Daily Brief" })).toBeVisible();
+  await expect(page.getByText("cash on hand")).toBeVisible();
+  await expect(page.getByText(/who owes you/)).toBeVisible();
+  await expect(page.getByText("while you were away")).toBeVisible();
+});
