@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 
 import { api, clearTokens, getToken, setTokens } from "@/lib/api";
 
+import { CommandPalette } from "@/components/CommandPalette";
 import { LiquidMark, LiveRing } from "@/components/fx";
 
 import { Providers } from "../providers";
@@ -217,6 +218,17 @@ function Sidebar() {
           </div>
         </Link>
         <TenantCard />
+        <button
+          onClick={() =>
+            document.dispatchEvent(
+              new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }),
+            )
+          }
+          className="mt-3 flex w-full items-center justify-between rounded-lg border border-line2 bg-white/[0.03] px-2.5 py-2 text-left text-xs text-faint transition-colors hover:border-line hover:text-mute"
+        >
+          <span>Search & command…</span>
+          <kbd className="mono-label rounded border border-line2 px-1.5 py-0.5">⌘K</kbd>
+        </button>
       </div>
 
       <nav className="flex-1 px-3 py-4">
@@ -283,6 +295,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <Providers>
+      <CommandPalette />
       <div className="flex min-h-screen">
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">{children}</main>

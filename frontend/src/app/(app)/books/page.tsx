@@ -4,7 +4,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { WhyDrawer } from "@/components/WhyDrawer";
 import {
@@ -66,7 +67,7 @@ function CategoryCell({
   );
 }
 
-export default function BooksPage() {
+function BooksPageInner() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const onboardInput = useRef<HTMLInputElement>(null);
@@ -77,6 +78,11 @@ export default function BooksPage() {
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [whyRefs, setWhyRefs] = useState<WhyRef[] | null>(null);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("why");
+    if (id) setWhyRefs([{ kind: "transaction", id }]);
+  }, [searchParams]);
   const { done } = useRunStream(runId);
 
   const txns = useQuery({
@@ -296,5 +302,13 @@ export default function BooksPage() {
 
       {whyRefs && <WhyDrawer refs={whyRefs} onClose={() => setWhyRefs(null)} />}
     </PageShell>
+  );
+}
+
+export default function BooksPage() {
+  return (
+    <Suspense fallback={null}>
+      <BooksPageInner />
+    </Suspense>
   );
 }
