@@ -63,9 +63,22 @@ eslint 0 · Playwright **18/18** · `npm run build` ✓.
 - `getByText` can't match `<input value=…>`; PulsingBorder/LiquidMetal
   prop schemas discoverable via `*Presets`/`*Meta` exports.
 
-## Residual / next
-- Beam `[data-agent-live]` wiring to live SSE runs (hook exists, unwired).
-- Light theme variant (tokens structured for it; not started).
-- Sandbox params → URL (deep-linkable scenarios).
-- e2e in CI still deliberate-skip (needs full stack; nightly candidate).
+## Residuals — CLOSED same session (R1–R4, user-directed follow-up)
+- **R1** — beam live: shell polls shared `["runs"]` cache, stamps
+  `[data-agent-live]`; palette invalidates on startRun for instant pulse.
+- **R2** — sandbox deep links: `/forecast?delay=&cut=&burn=` hydrate the
+  sliders; debounced state mirrors back via router.replace.
+- **R3** — light theme: tokens re-plumbed to CSS vars (`:root` dark,
+  `[data-theme=light]` warm-paper overrides), `--fill-*` translucent
+  fills, `--chart-*` themed marks, `--accent-contrast` CTAs, no-flash
+  script, Settings Appearance card (localStorage `fd-theme`, dark
+  default). All light pairs AA-verified (text ≥4.68, marks ≥4.88 vs 3.0).
+- **R4** — `.github/workflows/e2e-nightly.yml`: pg16+redis7 services,
+  alembic+seed, backend+worker headless, Playwright suite. Recall
+  deliberately absent — dead RECALL_BASE_URL + `E2E_LITE=1` skips the
+  badge-live spec. Cron 03:00 IST + workflow_dispatch (registers once
+  the file reaches the default branch).
+
+## Remaining after this session
 - PR #17 review + merge into dev is the human's call.
+- Suite count at close: 21 specs (20 in lite CI).
