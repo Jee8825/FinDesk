@@ -7,8 +7,8 @@ test("payables shield renders shell, cards and CA framing", async ({ page }) => 
   await page.goto("/payables");
   await expect(page.getByRole("heading", { name: "Payables Shield" })).toBeVisible();
   await expect(page.getByText("open to MSE vendors")).toBeVisible();
-  await expect(page.getByText("43B(h) at risk")).toBeVisible();
-  await expect(page.getByText("§16 interest owed")).toBeVisible();
+  await expect(page.getByText("43B(h) at risk").first()).toBeVisible();
+  await expect(page.getByText("§16 interest owed").first()).toBeVisible();
   // CA framing ships on every response — review-before-filing is a guardrail
   await expect(page.getByText(/confirm vendor Udyam status/)).toBeVisible();
 });
