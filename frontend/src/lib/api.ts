@@ -285,6 +285,15 @@ export type ForecastOut = {
   scenarios: Record<string, ForecastWeek[]>;
 };
 
+export type WhatifOut = {
+  forecast_id: string;
+  params: Record<string, number>;
+  weeks: ForecastWeek[];
+  gap: { scenario: string; week: number; week_start: string; shortfall_paise: number } | null;
+  pushed_out_paise: number;
+  end_delta_paise: number;
+};
+
 export type WcAction = {
   id: string;
   kind: string;
@@ -333,6 +342,11 @@ export const api = {
       apiPaths.POST_WC_ACTIONS_ACTION_ID_REQUEST.replace("{action_id}", id),
     ),
   forecast: () => request<ForecastOut>("GET", apiPaths.GET_FORECAST),
+  whatif: (params: {
+    collection_delay_days?: number;
+    inflow_haircut_bps?: number;
+    extra_monthly_outflow_paise?: number;
+  }) => request<WhatifOut>("POST", apiPaths.POST_FORECAST_WHATIF, params),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   monthEndReport: (period: string) =>
     request<MonthEndReport>(

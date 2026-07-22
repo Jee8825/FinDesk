@@ -1,49 +1,60 @@
 import type { Config } from "tailwindcss";
 
-// FinDesk design tokens — "ledger paper" system from FinDesk Wireframes.dc.html.
-// Light surfaces (books/queues) sit on warm cream; dark surfaces (cash command)
-// on deep warm black. Accent is burnt orange; mono labels do the annotating.
+// FinDesk design tokens — "Liquid Ledger" system (design-v2, dark-first).
+// One deep void canvas; surfaces are layered glass. Token NAMES are kept from
+// the ledger-paper era so existing pages inherit the reskin — VALUES are new.
+// Aura color trio (violet/teal/amber) lives in shader components, not here.
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        paper: "#e6dbc5", // page canvas
-        cream: "#fcf9f2", // sidebar / header top
-        cream2: "#f4eee2", // sidebar gradient end
-        card: "#fdfbf5", // light-surface card
-        line: "#e2dccd", // light borders
-        line2: "#eeeae1",
-        ink: "#26241f", // primary text / active nav pill
-        mute: "#55514a", // secondary text
-        faint: "#9b968a", // tertiary text
-        annot: "#a49e90", // mono annotations
-        accent: { DEFAULT: "#e8730a", soft: "#e8a868" }, // burnt orange
-        moss: "#3f7d4e", // success on light
-        mint: "#9fd2c0", // success on dark
-        claret: "#b0433a", // danger on light
-        blush: "#e8a3a0", // danger on dark
-        memory: "#4a6fa5", // "memory / existing belief" blue
+        // Every value is a CSS var — :root carries dark, [data-theme="light"]
+        // overrides in globals.css. Triplet vars keep /alpha utilities working.
+        paper: "rgb(var(--c-paper) / <alpha-value>)",
+        cream: "rgb(var(--c-cream) / <alpha-value>)",
+        cream2: "rgb(var(--c-cream2) / <alpha-value>)",
+        card: "rgb(var(--c-card) / <alpha-value>)",
+        line: "var(--c-line)", // baked alpha per theme
+        line2: "var(--c-line2)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        mute: "rgb(var(--c-mute) / <alpha-value>)",
+        faint: "rgb(var(--c-faint) / <alpha-value>)",
+        annot: "rgb(var(--c-annot) / <alpha-value>)",
+        accent: {
+          DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
+          soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
+        },
+        moss: "rgb(var(--c-moss) / <alpha-value>)",
+        mint: "rgb(var(--c-mint) / <alpha-value>)",
+        claret: "rgb(var(--c-claret) / <alpha-value>)",
+        blush: "rgb(var(--c-blush) / <alpha-value>)",
+        memory: "rgb(var(--c-memory) / <alpha-value>)",
         dark: {
-          bg: "#211f1b", // dark-surface content area
-          card: "#262420",
-          card2: "#2b2925",
-          line: "#2e2c28",
-          text: "#f0eee8",
-          mute: "#7d7a72",
+          bg: "rgb(var(--c-deep-bg) / <alpha-value>)",
+          card: "rgb(var(--c-deep-card) / <alpha-value>)",
+          card2: "rgb(var(--c-deep-card2) / <alpha-value>)",
+          line: "var(--c-line)",
+          text: "rgb(var(--c-ink) / <alpha-value>)",
+          mute: "rgb(var(--c-deep-mute) / <alpha-value>)",
         },
         // legacy alias (pre-redesign pages) — keep until fully retired
-        "teal-brand": "#0e6e74",
+        "teal-brand": "#2dd4bf",
       },
       fontFamily: {
-        sans: ["var(--font-plex-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["var(--font-plex-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       boxShadow: {
-        card: "0 18px 40px -24px rgba(120,106,70,0.45)",
-        "card-dark": "0 18px 40px -24px rgba(0,0,0,0.6)",
-        side: "6px 0 24px -12px rgba(120,106,70,0.4)",
+        // depth on void — soft, wide, blue-black
+        card: "0 24px 48px -24px rgba(2,6,16,0.9), 0 1px 0 0 rgba(255,255,255,0.06) inset",
+        "card-dark": "0 24px 48px -24px rgba(0,0,0,0.95), 0 1px 0 0 rgba(255,255,255,0.05) inset",
+        side: "8px 0 32px -16px rgba(2,6,16,0.9)",
+        glow: "0 0 0 1px rgba(255,160,40,0.25), 0 12px 40px -12px rgba(255,160,40,0.35)",
       },
+      backdropBlur: { glass: "18px" },
+      borderRadius: { glass: "1.25rem" },
     },
   },
   plugins: [],

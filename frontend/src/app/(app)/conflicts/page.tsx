@@ -97,7 +97,7 @@ function TopCard({ conflict, index, total }: { conflict: ConflictCard; index: nu
           whileTap={{ scale: 0.97 }}
           disabled={resolve.isPending}
           onClick={() => resolve.mutate("a")}
-          className="rounded-xl bg-memory px-4 py-3 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(74,111,165,0.7)] transition-colors hover:bg-[#3d5e8e] disabled:opacity-50"
+          className="rounded-xl bg-memory px-4 py-3 text-sm font-bold text-[#0b1020] shadow-[0_10px_24px_-10px_rgba(123,163,232,0.7)] transition-colors hover:bg-[#9db8ee] disabled:opacity-50"
         >
           Keep the stored belief
         </motion.button>
@@ -106,7 +106,7 @@ function TopCard({ conflict, index, total }: { conflict: ConflictCard; index: nu
           whileTap={{ scale: 0.97 }}
           disabled={resolve.isPending}
           onClick={() => resolve.mutate("b")}
-          className="rounded-xl bg-accent px-4 py-3 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(232,115,10,0.7)] transition-colors hover:bg-[#d96905] disabled:opacity-50"
+          className="rounded-xl bg-accent px-4 py-3 text-sm font-bold text-[var(--accent-contrast)] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft disabled:opacity-50"
         >
           Accept the new observation
         </motion.button>

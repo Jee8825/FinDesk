@@ -21,7 +21,7 @@ function ScoreDial({ score }: { score: number }) {
   const c = 2 * Math.PI * r;
   const filled = (score / 100) * c;
   const track = dark ? "#2e2c28" : "#e2dccd";
-  const fill = score >= 75 ? (dark ? "#9fd2c0" : "#3f7d4e") : score >= 50 ? "#e8a868" : "#e8a3a0";
+  const fill = score >= 75 ? "#43d695" : score >= 50 ? "#ffa028" : "#ff6e66";
   return (
     <svg viewBox="0 0 140 140" className="h-40 w-40" role="img" aria-label={`FinDesk score ${score}`}>
       <circle cx="70" cy="70" r={r} fill="none" stroke={track} strokeWidth="12" />

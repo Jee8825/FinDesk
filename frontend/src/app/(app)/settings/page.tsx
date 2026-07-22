@@ -2,6 +2,7 @@
 // Settings — "Integration cards" (wireframe Settings A): integrations,
 // entities, team & roles. Maker-checker roles are enforced server-side.
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -34,6 +35,49 @@ const INTEGRATIONS = [
     action: { label: "Roadmap", href: "#" },
   },
 ];
+
+function ThemeCard() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  }, []);
+  function apply(next: "dark" | "light") {
+    setTheme(next);
+    if (next === "light") document.documentElement.dataset.theme = "light";
+    else delete document.documentElement.dataset.theme;
+    try {
+      localStorage.setItem("fd-theme", next);
+    } catch {
+      /* private mode — theme just won't persist */
+    }
+  }
+  const btn = (v: "dark" | "light", label: string) => (
+    <button
+      onClick={() => apply(v)}
+      aria-pressed={theme === v}
+      className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+        theme === v
+          ? "border-accent/60 bg-accent/10 text-accent"
+          : "border-line2 text-mute hover:border-line hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <Card className="mt-6 p-5">
+      <MonoLabel>appearance</MonoLabel>
+      <p className="mt-2 text-[13px] text-mute">
+        Liquid glass, two moods. Dark is the void; light brings the ledger paper back.
+      </p>
+      <div className="mt-3 flex gap-2">
+        {btn("dark", "Dark")}
+        {btn("light", "Light")}
+      </div>
+      <p className="mono-annot mt-3">◇ stored locally · dark is the default</p>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.me(), staleTime: 60_000 });
@@ -68,6 +112,8 @@ export default function SettingsPage() {
         ))}
       </motion.div>
 
+      <ThemeCard />
+
       <Card className="mt-6 overflow-hidden !p-0">
         <div className="flex items-center justify-between border-b border-line2 px-6 py-4">
           <h2 className="text-[15px] font-bold text-ink">Team & roles</h2>
@@ -83,7 +129,7 @@ export default function SettingsPage() {
           <motion.ul initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.06 } } }}>
             <motion.li
               variants={{ initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0 } }}
-              className="flex items-center justify-between border-b border-line2/70 px-6 py-4"
+              className="flex items-center justify-between border-b border-line2 px-6 py-4"
             >
               <div>
                 <p className="text-sm font-bold text-ink">You</p>
@@ -97,7 +143,7 @@ export default function SettingsPage() {
                 <motion.li
                   key={m.tenant_id}
                   variants={{ initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0 } }}
-                  className="flex items-center justify-between border-b border-line2/70 px-6 py-4 last:border-0"
+                  className="flex items-center justify-between border-b border-line2 px-6 py-4 last:border-0"
                 >
                   <div>
                     <p className="text-sm font-bold text-ink">{m.tenant_name}</p>

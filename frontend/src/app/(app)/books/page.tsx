@@ -4,7 +4,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { WhyDrawer } from "@/components/WhyDrawer";
 import {
@@ -45,7 +46,7 @@ function CategoryCell({
         value={txn.category_code ?? ""}
         onChange={(e) => e.target.value && correct.mutate(e.target.value)}
         disabled={correct.isPending}
-        className={`max-w-36 rounded-lg border bg-cream px-1.5 py-0.5 text-xs transition-colors ${
+        className={`max-w-36 rounded-lg border bg-[var(--fill-2)] px-1.5 py-0.5 text-xs transition-colors ${
           txn.category_code ? "border-line text-mute" : "border-accent/50 text-accent"
         }`}
         aria-label="expense category"
@@ -66,7 +67,7 @@ function CategoryCell({
   );
 }
 
-export default function BooksPage() {
+function BooksPageInner() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const onboardInput = useRef<HTMLInputElement>(null);
@@ -77,6 +78,11 @@ export default function BooksPage() {
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [whyRefs, setWhyRefs] = useState<WhyRef[] | null>(null);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("why");
+    if (id) setWhyRefs([{ kind: "transaction", id }]);
+  }, [searchParams]);
   const { done } = useRunStream(runId);
 
   const txns = useQuery({
@@ -180,7 +186,7 @@ export default function BooksPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search narration, vendor, amount…"
-            className="w-72 rounded-full border border-line bg-cream py-2 pl-8 pr-4 text-[13px] shadow-inner outline-none transition-colors placeholder:text-faint focus:border-accent/60"
+            className="w-72 rounded-full border border-line bg-[var(--fill-2)] py-2 pl-8 pr-4 text-[13px] shadow-none outline-none transition-colors placeholder:text-faint focus:border-accent/60"
           />
         </label>
         {chips.map((c) => (
@@ -192,8 +198,8 @@ export default function BooksPage() {
               filter === c.key
                 ? "border-ink bg-ink text-cream"
                 : c.key === "unmatched"
-                  ? "border-accent/40 bg-cream text-accent"
-                  : "border-line bg-cream text-mute hover:border-faint"
+                  ? "border-accent/40 bg-[var(--fill-2)] text-accent"
+                  : "border-line bg-[var(--fill-2)] text-mute hover:border-faint"
             }`}
           >
             {c.label}
@@ -251,7 +257,7 @@ export default function BooksPage() {
                 <motion.tr
                   key={t.id}
                   variants={{ initial: { opacity: 0 }, animate: { opacity: 1 } }}
-                  className="border-b border-line2/70 transition-colors last:border-0 hover:bg-cream"
+                  className="border-b border-line2 transition-colors last:border-0 hover:bg-[var(--fill-3)]"
                 >
                   <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-faint">
                     {t.value_date.slice(5)}
@@ -296,5 +302,13 @@ export default function BooksPage() {
 
       {whyRefs && <WhyDrawer refs={whyRefs} onClose={() => setWhyRefs(null)} />}
     </PageShell>
+  );
+}
+
+export default function BooksPage() {
+  return (
+    <Suspense fallback={null}>
+      <BooksPageInner />
+    </Suspense>
   );
 }

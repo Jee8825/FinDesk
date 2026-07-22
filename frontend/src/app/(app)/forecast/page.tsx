@@ -1,9 +1,9 @@
 "use client";
 // Forecast — "Band chart" (wireframe Forecast A, dark signature surface B3):
 // scenario bands (downside / base / upside), gap attribution, suggested cover.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { RefreshCw } from "lucide-react";
+import { FlaskConical, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -16,19 +16,24 @@ import {
   PrimaryBtn,
   Skeleton,
 } from "@/components/ui";
+import { ForecastTerrain } from "@/components/ForecastTerrain";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+
 import { api, formatINR, formatINRCompact, type ForecastOut, type ForecastWeek } from "@/lib/api";
 
 const W = 720;
 const H = 260;
 const PAD = 14;
 
-function BandsChart({ f }: { f: ForecastOut }) {
+function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) {
   const base = f.scenarios.base ?? [];
   const up = f.scenarios.upside ?? [];
   const down = f.scenarios.downside ?? [];
+  const ghost = whatif ?? [];
   if (!base.length) return null;
 
-  const all = [...base, ...up, ...down].map((w) => w.closing_paise);
+  const all = [...base, ...up, ...down, ...ghost].map((w) => w.closing_paise);
   const min = Math.min(...all, 0);
   const max = Math.max(...all, 0);
   const span = max - min || 1;
@@ -51,24 +56,24 @@ function BandsChart({ f }: { f: ForecastOut }) {
             x2={x(f.gap.week)}
             y1={PAD}
             y2={H - PAD}
-            stroke="#e8a3a0"
+            stroke="var(--chart-danger)"
             strokeWidth="1"
             strokeDasharray="4 4"
           />
-          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="#e8a3a0" fontFamily="var(--font-plex-mono)">
+          <text x={x(f.gap.week)} y={PAD + 2} textAnchor="middle" fontSize="10" fill="var(--chart-danger)" fontFamily="var(--font-plex-mono)">
             W{f.gap.week} GAP {formatINRCompact(f.gap.shortfall_paise)}
           </text>
         </>
       )}
-      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="#4a4640" strokeDasharray="4 4" strokeWidth="1" />
-      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="#7d7a72" fontFamily="var(--font-plex-mono)">₹0</text>
+      <line x1={PAD} x2={W - PAD} y1={y(0)} y2={y(0)} stroke="var(--chart-grid)" strokeDasharray="4 4" strokeWidth="1" />
+      <text x={PAD + 2} y={y(0) - 5} fontSize="9" fill="var(--chart-text)" fontFamily="var(--font-plex-mono)">₹0</text>
       {band && (
-        <motion.path d={band} fill="#e8730a" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
+        <motion.path d={band} fill="var(--chart-base)" initial={{ opacity: 0 }} animate={{ opacity: 0.13 }} transition={{ duration: 1.2 }} />
       )}
       <motion.path
         d={path(up)}
         fill="none"
-        stroke="#9fd2c0"
+        stroke="var(--chart-up)"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -78,7 +83,7 @@ function BandsChart({ f }: { f: ForecastOut }) {
       <motion.path
         d={path(down)}
         fill="none"
-        stroke="#e8a3a0"
+        stroke="var(--chart-down)"
         strokeWidth="1.5"
         strokeDasharray="5 4"
         initial={{ pathLength: 0 }}
@@ -88,21 +93,31 @@ function BandsChart({ f }: { f: ForecastOut }) {
       <motion.path
         d={path(base)}
         fill="none"
-        stroke="#e8730a"
+        stroke="var(--chart-base)"
         strokeWidth="2.5"
         strokeLinecap="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
         transition={{ duration: 1.6, ease: "easeOut" }}
       />
+      {whatif && whatif.length > 1 && (
+        <path
+          d={path(whatif)}
+          fill="none"
+          stroke="#edf1fa"
+          strokeWidth="2"
+          strokeDasharray="7 5"
+          opacity={0.85}
+        />
+      )}
       {base.map((w, i) => (
         <motion.circle
           key={w.week}
           cx={x(w.week)}
           cy={y(w.closing_paise)}
           r="3"
-          fill="#262420"
-          stroke="#e8730a"
+          fill="var(--chart-dot)"
+          stroke="var(--chart-base)"
           strokeWidth="2"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -114,7 +129,7 @@ function BandsChart({ f }: { f: ForecastOut }) {
           cx={x(f.gap.week)}
           cy={y(Math.min(...(down.length ? down : base).map((w) => w.closing_paise)))}
           r="5"
-          fill="#e8a3a0"
+          fill="var(--chart-danger)"
           initial={{ scale: 0 }}
           animate={{ scale: [0, 1.4, 1] }}
           transition={{ delay: 1.2, duration: 0.5 }}
@@ -124,7 +139,158 @@ function BandsChart({ f }: { f: ForecastOut }) {
   );
 }
 
-export default function ForecastPage() {
+
+function SandboxCard({
+  onWhatif,
+}: {
+  onWhatif: (weeks: ForecastWeek[] | undefined) => void;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const num = (k: string, max: number) =>
+    Math.max(0, Math.min(max, Number(searchParams.get(k)) || 0));
+  const [delay, setDelay] = useState(() => num("delay", 60));
+  const [haircut, setHaircut] = useState(() => num("cut", 50));
+  const [extra, setExtra] = useState(() => num("burn", 20));
+  const dirty = delay !== 0 || haircut !== 0 || extra !== 0;
+
+  const [debounced, setDebounced] = useState({ delay, haircut, extra });
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ delay, haircut, extra }), 300);
+    return () => clearTimeout(t);
+  }, [delay, haircut, extra]);
+
+  // scenarios are shareable: the URL mirrors the debounced sliders
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (debounced.delay) q.set("delay", String(debounced.delay));
+    if (debounced.haircut) q.set("cut", String(debounced.haircut));
+    if (debounced.extra) q.set("burn", String(debounced.extra));
+    router.replace(q.size ? `/forecast?${q}` : "/forecast", { scroll: false });
+  }, [debounced, router]);
+
+  const q = useQuery({
+    queryKey: ["whatif", debounced],
+    queryFn: () =>
+      api.whatif({
+        collection_delay_days: debounced.delay,
+        inflow_haircut_bps: debounced.haircut * 100,
+        extra_monthly_outflow_paise: debounced.extra * 100_000 * 100,
+      }),
+    enabled: debounced.delay !== 0 || debounced.haircut !== 0 || debounced.extra !== 0,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    onWhatif(dirty ? q.data?.weeks : undefined);
+  }, [dirty, q.data, onWhatif]);
+
+  const delta = q.data?.end_delta_paise ?? 0;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <MonoLabel className="flex items-center gap-1.5">
+          <FlaskConical size={12} className="text-accent" /> scenario sandbox
+        </MonoLabel>
+        {dirty && (
+          <button
+            onClick={() => {
+              setDelay(0);
+              setHaircut(0);
+              setExtra(0);
+            }}
+            className="mono-label text-faint hover:text-mute"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <p className="mono-annot mt-1.5">◇ server computes — POST /forecast/whatif · UI only renders</p>
+
+      <div className="mt-4 space-y-4">
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">Clients pay later</span>
+            <span className="tnum font-mono font-semibold text-ink">+{delay}d</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={60}
+            step={7}
+            value={delay}
+            onChange={(e) => setDelay(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="collection delay days"
+          />
+        </label>
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">Inflows that slip away</span>
+            <span className="tnum font-mono font-semibold text-ink">{haircut}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={50}
+            step={5}
+            value={haircut}
+            onChange={(e) => setHaircut(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="inflow haircut percent"
+          />
+        </label>
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">New monthly burn (hire, rent…)</span>
+            <span className="tnum font-mono font-semibold text-ink">₹{extra}L/mo</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={20}
+            step={1}
+            value={extra}
+            onChange={(e) => setExtra(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="extra monthly outflow lakh"
+          />
+        </label>
+      </div>
+
+      {dirty && q.data && (
+        <div className="mt-4 border-t border-line2 pt-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-mute">Horizon ends</span>
+            <span className={`tnum font-mono font-semibold ${delta < 0 ? "text-blush" : "text-mint"}`}>
+              {delta >= 0 ? "+" : "−"}{formatINRCompact(Math.abs(delta))}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-mute">Funding gap</span>
+            {q.data.gap ? (
+              <span className="font-mono text-xs font-semibold text-blush">
+                week {q.data.gap.week} · short {formatINRCompact(q.data.gap.shortfall_paise)}
+              </span>
+            ) : (
+              <span className="font-mono text-xs font-semibold text-mint">none in horizon</span>
+            )}
+          </div>
+          {q.data.pushed_out_paise > 0 && (
+            <div className="mono-annot mt-1.5">
+              ◇ {formatINRCompact(q.data.pushed_out_paise)} pushed past the horizon
+            </div>
+          )}
+          <div className="mono-annot mt-1.5">◇ white dashed line on the chart is this scenario</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ForecastPageInner() {
   const queryClient = useQueryClient();
   const forecast = useQuery({ queryKey: ["forecast"], queryFn: () => api.forecast(), retry: false });
   const refresh = useMutation({
@@ -133,6 +299,7 @@ export default function ForecastPage() {
   });
 
   const f = forecast.data;
+  const [whatifWeeks, setWhatifWeeks] = useState<ForecastWeek[] | undefined>(undefined);
   const gapTotal = f?.gap ? f.gap.delayed_inflows.reduce((s, d) => s + d.amount_paise, 0) : 0;
 
   return (
@@ -171,7 +338,7 @@ export default function ForecastPage() {
                 <span className="text-blush">● downside</span>
               </div>
             </div>
-            <BandsChart f={f} />
+            <ForecastTerrain f={f} whatif={whatifWeeks} fallback={<BandsChart f={f} whatif={whatifWeeks} />} />
             <div className="mt-2 flex items-center justify-between">
               <span className="mono-annot">
                 opening {formatINRCompact(f.opening_balance_paise)} · recurring outflow ~
@@ -199,6 +366,7 @@ export default function ForecastPage() {
           </Card>
 
           <div className="space-y-5">
+            <SandboxCard onWhatif={setWhatifWeeks} />
             <Card className={`p-6 ${f.gap ? "border-blush/30" : ""}`}>
               <MonoLabel className={f.gap ? "!text-blush" : "!text-mint"}>
                 {f.gap ? `gap attribution · w${f.gap.week}` : "no gap in horizon"}
@@ -242,7 +410,7 @@ export default function ForecastPage() {
                 <motion.span
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-white shadow-[0_10px_24px_-10px_rgba(232,115,10,0.7)] transition-colors hover:bg-[#d96905]"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-[var(--accent-contrast)] shadow-[0_10px_24px_-10px_rgba(255,160,40,0.7)] transition-colors hover:bg-accent-soft"
                 >
                   See WC actions →
                 </motion.span>
@@ -252,5 +420,13 @@ export default function ForecastPage() {
         </div>
       )}
     </PageShell>
+  );
+}
+
+export default function ForecastPage() {
+  return (
+    <Suspense fallback={null}>
+      <ForecastPageInner />
+    </Suspense>
   );
 }
