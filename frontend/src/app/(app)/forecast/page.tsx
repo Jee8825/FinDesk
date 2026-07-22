@@ -1,9 +1,9 @@
 "use client";
 // Forecast — "Band chart" (wireframe Forecast A, dark signature surface B3):
 // scenario bands (downside / base / upside), gap attribution, suggested cover.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { RefreshCw } from "lucide-react";
+import { FlaskConical, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -18,18 +18,20 @@ import {
 } from "@/components/ui";
 import { ForecastTerrain } from "@/components/ForecastTerrain";
 import { api, formatINR, formatINRCompact, type ForecastOut, type ForecastWeek } from "@/lib/api";
+import { useEffect, useState } from "react";
 
 const W = 720;
 const H = 260;
 const PAD = 14;
 
-function BandsChart({ f }: { f: ForecastOut }) {
+function BandsChart({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) {
   const base = f.scenarios.base ?? [];
   const up = f.scenarios.upside ?? [];
   const down = f.scenarios.downside ?? [];
+  const ghost = whatif ?? [];
   if (!base.length) return null;
 
-  const all = [...base, ...up, ...down].map((w) => w.closing_paise);
+  const all = [...base, ...up, ...down, ...ghost].map((w) => w.closing_paise);
   const min = Math.min(...all, 0);
   const max = Math.max(...all, 0);
   const span = max - min || 1;
@@ -96,6 +98,16 @@ function BandsChart({ f }: { f: ForecastOut }) {
         animate={{ pathLength: 1 }}
         transition={{ duration: 1.6, ease: "easeOut" }}
       />
+      {whatif && whatif.length > 1 && (
+        <path
+          d={path(whatif)}
+          fill="none"
+          stroke="#edf1fa"
+          strokeWidth="2"
+          strokeDasharray="7 5"
+          opacity={0.85}
+        />
+      )}
       {base.map((w, i) => (
         <motion.circle
           key={w.week}
@@ -125,6 +137,144 @@ function BandsChart({ f }: { f: ForecastOut }) {
   );
 }
 
+
+function SandboxCard({
+  onWhatif,
+}: {
+  onWhatif: (weeks: ForecastWeek[] | undefined) => void;
+}) {
+  const [delay, setDelay] = useState(0);
+  const [haircut, setHaircut] = useState(0);
+  const [extra, setExtra] = useState(0);
+  const dirty = delay !== 0 || haircut !== 0 || extra !== 0;
+
+  const [debounced, setDebounced] = useState({ delay, haircut, extra });
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ delay, haircut, extra }), 300);
+    return () => clearTimeout(t);
+  }, [delay, haircut, extra]);
+
+  const q = useQuery({
+    queryKey: ["whatif", debounced],
+    queryFn: () =>
+      api.whatif({
+        collection_delay_days: debounced.delay,
+        inflow_haircut_bps: debounced.haircut * 100,
+        extra_monthly_outflow_paise: debounced.extra * 100_000 * 100,
+      }),
+    enabled: debounced.delay !== 0 || debounced.haircut !== 0 || debounced.extra !== 0,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    onWhatif(dirty ? q.data?.weeks : undefined);
+  }, [dirty, q.data, onWhatif]);
+
+  const delta = q.data?.end_delta_paise ?? 0;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <MonoLabel className="flex items-center gap-1.5">
+          <FlaskConical size={12} className="text-accent" /> scenario sandbox
+        </MonoLabel>
+        {dirty && (
+          <button
+            onClick={() => {
+              setDelay(0);
+              setHaircut(0);
+              setExtra(0);
+            }}
+            className="mono-label text-faint hover:text-mute"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <p className="mono-annot mt-1.5">◇ server computes — POST /forecast/whatif · UI only renders</p>
+
+      <div className="mt-4 space-y-4">
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">Clients pay later</span>
+            <span className="tnum font-mono font-semibold text-ink">+{delay}d</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={60}
+            step={7}
+            value={delay}
+            onChange={(e) => setDelay(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="collection delay days"
+          />
+        </label>
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">Inflows that slip away</span>
+            <span className="tnum font-mono font-semibold text-ink">{haircut}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={50}
+            step={5}
+            value={haircut}
+            onChange={(e) => setHaircut(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="inflow haircut percent"
+          />
+        </label>
+        <label className="block">
+          <div className="flex justify-between text-xs">
+            <span className="text-mute">New monthly burn (hire, rent…)</span>
+            <span className="tnum font-mono font-semibold text-ink">₹{extra}L/mo</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={20}
+            step={1}
+            value={extra}
+            onChange={(e) => setExtra(Number(e.target.value))}
+            className="mt-1.5 w-full accent-[#ffa028]"
+            aria-label="extra monthly outflow lakh"
+          />
+        </label>
+      </div>
+
+      {dirty && q.data && (
+        <div className="mt-4 border-t border-line2 pt-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-mute">Horizon ends</span>
+            <span className={`tnum font-mono font-semibold ${delta < 0 ? "text-blush" : "text-mint"}`}>
+              {delta >= 0 ? "+" : "−"}{formatINRCompact(Math.abs(delta))}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-mute">Funding gap</span>
+            {q.data.gap ? (
+              <span className="font-mono text-xs font-semibold text-blush">
+                week {q.data.gap.week} · short {formatINRCompact(q.data.gap.shortfall_paise)}
+              </span>
+            ) : (
+              <span className="font-mono text-xs font-semibold text-mint">none in horizon</span>
+            )}
+          </div>
+          {q.data.pushed_out_paise > 0 && (
+            <div className="mono-annot mt-1.5">
+              ◇ {formatINRCompact(q.data.pushed_out_paise)} pushed past the horizon
+            </div>
+          )}
+          <div className="mono-annot mt-1.5">◇ white dashed line on the chart is this scenario</div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function ForecastPage() {
   const queryClient = useQueryClient();
   const forecast = useQuery({ queryKey: ["forecast"], queryFn: () => api.forecast(), retry: false });
@@ -134,6 +284,7 @@ export default function ForecastPage() {
   });
 
   const f = forecast.data;
+  const [whatifWeeks, setWhatifWeeks] = useState<ForecastWeek[] | undefined>(undefined);
   const gapTotal = f?.gap ? f.gap.delayed_inflows.reduce((s, d) => s + d.amount_paise, 0) : 0;
 
   return (
@@ -172,7 +323,7 @@ export default function ForecastPage() {
                 <span className="text-blush">● downside</span>
               </div>
             </div>
-            <ForecastTerrain f={f} fallback={<BandsChart f={f} />} />
+            <ForecastTerrain f={f} whatif={whatifWeeks} fallback={<BandsChart f={f} whatif={whatifWeeks} />} />
             <div className="mt-2 flex items-center justify-between">
               <span className="mono-annot">
                 opening {formatINRCompact(f.opening_balance_paise)} · recurring outflow ~
@@ -200,6 +351,7 @@ export default function ForecastPage() {
           </Card>
 
           <div className="space-y-5">
+            <SandboxCard onWhatif={setWhatifWeeks} />
             <Card className={`p-6 ${f.gap ? "border-blush/30" : ""}`}>
               <MonoLabel className={f.gap ? "!text-blush" : "!text-mint"}>
                 {f.gap ? `gap attribution · w${f.gap.week}` : "no gap in horizon"}

@@ -111,6 +111,11 @@ paths:
 
   /forecast:
     get: { tags: [cash], summary: Latest forecast (scenarios + lines + drivers), responses: { "200": { description: forecast } } }
+  /forecast/whatif:
+    post:
+      tags: [cash]
+      summary: Deterministic what-if on the stored base scenario (collection delay, inflow haircut, extra outflow) — server computes, UI only renders
+      responses: { "200": { description: adjusted weeks + gap } }
   /receivables/radar:
     get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
   /wc-actions:

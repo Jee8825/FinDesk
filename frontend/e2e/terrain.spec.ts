@@ -11,3 +11,20 @@ test("forecast shows the 3D terrain canvas with orbit hint", async ({ page }) =>
   // fallback escape hatch is offered
   await expect(page.getByRole("button", { name: "classic 2D" })).toBeVisible();
 });
+
+test("scenario sandbox morphs the forecast server-side", async ({ page }) => {
+  await page.goto("/forecast");
+  await expect(page.getByText("scenario sandbox")).toBeVisible({ timeout: 15_000 });
+
+  const whatif = page.waitForResponse(
+    (r) => r.url().includes("/forecast/whatif") && r.status() === 200,
+  );
+  await page.getByLabel("collection delay days").fill("28");
+  await whatif;
+
+  await expect(page.getByText("Horizon ends")).toBeVisible();
+  await expect(page.getByText("Funding gap")).toBeVisible();
+  // reset clears the readout
+  await page.getByRole("button", { name: "reset" }).click();
+  await expect(page.getByText("Horizon ends")).not.toBeVisible();
+});

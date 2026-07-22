@@ -17,11 +17,13 @@ const ROW_COLORS = {
 } as const;
 const SPAN_X = 13; // world units across the 13 weeks
 
-type Rows = { upside: ForecastWeek[]; base: ForecastWeek[]; downside: ForecastWeek[] };
+type Rows = { upside: ForecastWeek[]; base: ForecastWeek[]; downside: ForecastWeek[]; whatif?: ForecastWeek[] };
 
 function useScales(rows: Rows) {
   return useMemo(() => {
-    const all = [...rows.upside, ...rows.base, ...rows.downside].map((w) => w.closing_paise);
+    const all = [...rows.upside, ...rows.base, ...rows.downside, ...(rows.whatif ?? [])].map(
+      (w) => w.closing_paise,
+    );
     const min = Math.min(0, ...all); // domain always includes the waterline
     const max = Math.max(0, ...all);
     const span = max - min || 1;
@@ -35,7 +37,7 @@ function useScales(rows: Rows) {
 function TerrainSurface({ rows }: { rows: Rows }) {
   const { x, y, n } = useScales(rows);
   const geometry = useMemo(() => {
-    const order: (keyof Rows)[] = ["upside", "base", "downside"];
+    const order: ("upside" | "base" | "downside")[] = ["upside", "base", "downside"];
     const positions: number[] = [];
     const colors: number[] = [];
     order.forEach((k) => {
@@ -78,7 +80,7 @@ function TerrainSurface({ rows }: { rows: Rows }) {
   );
 }
 
-function Ridge({ rows, row }: { rows: Rows; row: keyof Rows }) {
+function Ridge({ rows, row }: { rows: Rows; row: "upside" | "base" | "downside" }) {
   const { x, y } = useScales(rows); // shared scale — rows must agree
   const weeks = rows[row];
   const points = useMemo(
@@ -94,6 +96,18 @@ function Ridge({ rows, row }: { rows: Rows; row: keyof Rows }) {
       dashSize={0.18}
       gapSize={0.12}
     />
+  );
+}
+
+function WhatifRidge({ rows }: { rows: Rows }) {
+  const { x, y } = useScales(rows);
+  const points = useMemo(
+    () => (rows.whatif ?? []).map((w, i) => new THREE.Vector3(x(i), y(w.closing_paise), 0.85)),
+    [rows.whatif, x, y],
+  );
+  if (!points.length) return null;
+  return (
+    <Line points={points} color="#edf1fa" lineWidth={2} dashed dashSize={0.28} gapSize={0.14} />
   );
 }
 
@@ -192,14 +206,15 @@ function WeekTooltip({ f, rows, week }: { f: ForecastOut; rows: Rows; week: numb
   );
 }
 
-function SceneInner({ f }: { f: ForecastOut }) {
+function SceneInner({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) {
   const rows: Rows = useMemo(
     () => ({
       upside: f.scenarios.upside ?? [],
       base: f.scenarios.base ?? [],
       downside: f.scenarios.downside ?? [],
+      whatif,
     }),
-    [f],
+    [f, whatif],
   );
   const { y0 } = useScales(rows);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -215,6 +230,7 @@ function SceneInner({ f }: { f: ForecastOut }) {
       <Ridge rows={rows} row="upside" />
       <Ridge rows={rows} row="base" />
       <Ridge rows={rows} row="downside" />
+      <WhatifRidge rows={rows} />
       <GapBeacon f={f} rows={rows} />
       <HoverColumns rows={rows} onHover={setHovered} />
       {hovered !== null && <WeekTooltip f={f} rows={rows} week={hovered} />}
@@ -261,11 +277,11 @@ function SceneInner({ f }: { f: ForecastOut }) {
   );
 }
 
-export default function ForecastTerrainScene({ f }: { f: ForecastOut }) {
+export default function ForecastTerrainScene({ f, whatif }: { f: ForecastOut; whatif?: ForecastWeek[] }) {
   return (
     <div className="mt-4 h-[340px] w-full overflow-hidden rounded-glass border border-line2 bg-[#04070d]">
       <Canvas dpr={[1, 2]} camera={{ position: [7.5, 5.5, 9.5], fov: 42 }}>
-        <SceneInner f={f} />
+        <SceneInner f={f} whatif={whatif} />
       </Canvas>
     </div>
   );

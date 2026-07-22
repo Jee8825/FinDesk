@@ -7,7 +7,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
-import type { ForecastOut } from "@/lib/api";
+import type { ForecastOut, ForecastWeek } from "@/lib/api";
 
 const TerrainScene = dynamic(() => import("./ForecastTerrainScene"), {
   ssr: false,
@@ -29,9 +29,11 @@ function webglAvailable(): boolean {
 
 export function ForecastTerrain({
   f,
+  whatif,
   fallback,
 }: {
   f: ForecastOut;
+  whatif?: ForecastWeek[];
   fallback: React.ReactNode;
 }) {
   const [mode, setMode] = useState<"pending" | "3d" | "2d">("pending");
@@ -48,7 +50,7 @@ export function ForecastTerrain({
 
   return (
     <div>
-      <TerrainScene f={f} />
+      <TerrainScene f={f} whatif={whatif} />
       <div className="mt-2 flex items-center justify-between">
         <span className="mono-annot">
           ◇ drag to orbit · hover a week for drivers · the claret plane is the ₹0 waterline
