@@ -41,16 +41,19 @@ async def recall_behavior(state: ForecastState) -> dict:
         ],
     )
     avg_late: dict[str, float] = {}
+    spread: dict[str, float] = {}
     for cid in client_ids:
         lates = parse_late_days(
             [m.get("content", "") for m in recalled.get(f"client:{cid}", [])]
         )
         if lates:
-            avg_late[cid] = round(sum(lates) / len(lates), 1)
+            stats = engine.behavior_stats(lates)
+            avg_late[cid] = stats["median_late"]  # median: robust to one-offs
+            spread[cid] = stats["spread_days"]
     await state.emitter.step(
         "recall_behavior", "finished", step_id, clients_with_history=len(avg_late)
     )
-    return {"avg_late_by_client": avg_late}
+    return {"avg_late_by_client": avg_late, "spread_by_client": spread}
 
 
 async def projector(state: ForecastState) -> dict:
@@ -63,6 +66,7 @@ async def projector(state: ForecastState) -> dict:
         open_invoices=state.open_invoices,
         avg_late_by_client=state.avg_late_by_client,
         monthly_outflows=monthly_outflows,
+        spread_by_client=state.spread_by_client,
     )
     await state.emitter.step(
         "project",

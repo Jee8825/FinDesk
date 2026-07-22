@@ -27,7 +27,11 @@ from decimal import ROUND_HALF_UP, Decimal
 
 STATUTORY_WINDOW_DAYS = 45
 BANK_RATE_MULTIPLIER = 3
-DEFAULT_BANK_RATE_BPS = 675  # RBI bank rate 6.75% — configurable per deployment
+# RBI bank rate 6.75% (last verified Jul 2026). §16 interest = 3× this figure,
+# so a stale value silently mis-states statutory interest — whoever operates a
+# deployment owns re-verifying it against rbi.org.in after every MPC revision
+# and overriding via the bank_rate_bps parameter/config, not by editing here.
+DEFAULT_BANK_RATE_BPS = 675
 
 # escalation ladder: states are deterministic; agents choose words, not steps
 LADDER = (

@@ -16,26 +16,31 @@ from findesk_shared import uuid7
 
 from findesk_tools.treds.schemas import ListingReceipt, ListingRefused, TredsQuote
 
-DEFAULT_RATE_BPS = 1800  # 18% annualized — sandbox figure
+# TReDS auctions for accepted corporate invoices typically clear well below
+# working-capital loan rates — repo-linked competitive bidding. 9.5% is a
+# defensible sandbox midpoint (verified against platform marketing ranges,
+# Jul 2026); real adapters return actual bids and ignore this constant.
+DEFAULT_RATE_BPS = 950
 
 
 class SandboxTredsProvider:
     name = "sandbox-treds"
 
-    def __init__(self, listings_dir: str = "var/treds") -> None:
+    def __init__(self, listings_dir: str = "var/treds", *, rate_bps: int | None = None) -> None:
         self._dir = Path(listings_dir)
+        self.rate_bps = DEFAULT_RATE_BPS if rate_bps is None else rate_bps
 
     def quote(
         self, *, invoice_ref: str, amount_paise: int, tenor_days: int
     ) -> TredsQuote:
         tenor_days = max(1, tenor_days)
-        cost = round(amount_paise * DEFAULT_RATE_BPS / 10_000 * tenor_days / 365)
+        cost = round(amount_paise * self.rate_bps / 10_000 * tenor_days / 365)
         return TredsQuote(
             invoice_ref=invoice_ref,
             platform=self.name,
             amount_paise=amount_paise,
             tenor_days=tenor_days,
-            discount_rate_bps_annual=DEFAULT_RATE_BPS,
+            discount_rate_bps_annual=self.rate_bps,
             cost_paise=cost,
             unlock_paise=amount_paise - cost,
             valid_until=datetime.now(UTC).date().isoformat(),

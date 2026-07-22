@@ -42,15 +42,35 @@ def _week_index(start: datetime, when: datetime, horizon: int) -> int | None:
     return index if index < horizon else None
 
 
-def _inflow_date(invoice: dict[str, Any], avg_late: float | None, scenario: str) -> datetime:
+def _inflow_date(
+    invoice: dict[str, Any],
+    avg_late: float | None,
+    scenario: str,
+    spread: float | None = None,
+) -> datetime:
     due = datetime.fromisoformat(invoice["due_date"])
     if scenario == "upside":
         return due
     delay = avg_late if avg_late is not None else DEFAULT_PAY_DELAY_DAYS
     predicted = due + timedelta(days=delay)
     if scenario == "downside":
-        predicted += timedelta(days=DOWNSIDE_SLIP_DAYS)
+        # a client whose lateness varies widely deserves a wider band than the
+        # flat slip — observed dispersion beats a constant when we have it
+        predicted += timedelta(days=max(DOWNSIDE_SLIP_DAYS, spread or 0))
     return predicted
+
+
+def behavior_stats(lates: list[int]) -> dict[str, float]:
+    """Median + IQR from raw lateness observations. Pure; median resists the
+    one-off 60-day outlier that would drag a mean (and the whole base band)."""
+    ordered = sorted(lates)
+    n = len(ordered)
+    mid = n // 2
+    median = float(ordered[mid]) if n % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+    q1 = ordered[max(0, (n // 4))]
+    q3 = ordered[min(n - 1, (3 * n) // 4)]
+    spread = float(q3 - q1) if n >= 4 else 0.0
+    return {"median_late": round(median, 1), "spread_days": round(spread, 1)}
 
 
 def project(
@@ -61,6 +81,7 @@ def project(
     avg_late_by_client: dict[str, float],
     monthly_outflows: dict[str, int],  # vendor label → stable monthly paise
     horizon_weeks: int = DEFAULT_HORIZON_WEEKS,
+    spread_by_client: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     weekly_outflow = round(sum(monthly_outflows.values()) / WEEKS_PER_MONTH)
 
@@ -79,7 +100,8 @@ def project(
         ]
         for inv in open_invoices:
             avg_late = avg_late_by_client.get(inv["client_id"])
-            when = _inflow_date(inv, avg_late, scenario)
+            spread = (spread_by_client or {}).get(inv["client_id"])
+            when = _inflow_date(inv, avg_late, scenario, spread)
             idx = _week_index(start, when, horizon_weeks)
             if idx is None:
                 continue
