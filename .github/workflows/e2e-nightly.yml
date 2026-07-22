@@ -52,8 +52,9 @@ jobs:
 
       - name: Install python workspaces
         run: |
-          pip install -e ./shared/py # findesk-shared — local package, resolve first
-          for ws in backend agents tools; do
+          # local packages resolve in dependency order: shared → tools → backend → agents
+          pip install -e ./shared/py
+          for ws in tools backend agents; do
             pip install -e "./$ws[dev]" 2>/dev/null || pip install -e "./$ws"
           done
 
