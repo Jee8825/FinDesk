@@ -5,7 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30_000,
+  timeout: process.env.CI ? 60_000 : 30_000,
+  expect: { timeout: process.env.CI ? 15_000 : 5_000 },
   fullyParallel: false, // smoke specs share seeded state; keep ordering simple
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
@@ -26,9 +27,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // CI runs the prebuilt app (fast, deterministic); local dev reuses HMR
+    command: process.env.E2E_PROD ? "npm run start" : "npm run dev",
     url: "http://localhost:3001",
     reuseExistingServer: true,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });

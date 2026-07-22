@@ -77,8 +77,14 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Build frontend (prod — dev-server cold compiles starve CI timeouts)
+        working-directory: frontend
+        run: npm run build
+
       - name: Playwright suite
         working-directory: frontend
+        env:
+          E2E_PROD: "1"
         run: npx playwright test
 
       - name: Surface service logs on failure
