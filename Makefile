@@ -1,4 +1,4 @@
-.PHONY: up down dev dev-up dev-down seed lint test test-int contracts smoke logs
+.PHONY: up down dev dev-up dev-down seed lint test test-int test-e2e contracts smoke logs
 
 # ----- stack -------------------------------------------------------------
 dev-up:        ## working local stack (docker datastores + host venv services) — use this, `up` images are broken
@@ -37,6 +37,9 @@ test:          ## unit tests, all workspaces
 	@for ws in backend agents tools memory; do \
 	  [ -d $$ws/tests/unit ] && (cd $$ws && python -m pytest tests/unit -q) || true; \
 	done
+
+test-e2e:      ## Playwright smoke against the dev stack (`make dev-up` + seed first)
+	cd frontend && npx playwright test
 
 test-int:      ## integration tests (testcontainers)
 	@for ws in backend agents tools memory; do \
