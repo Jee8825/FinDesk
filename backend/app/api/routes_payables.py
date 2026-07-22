@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.auth.deps import Auth
+from app.config import get_settings
 from app.db import session_scope
 from app.db.books_repo import BooksRepo
 from app.services.payables import CA_NOTE, MSE_STATUSES, compliance_row, totals
@@ -58,6 +59,7 @@ async def payables_compliance(auth: Auth) -> PayablesOut:
             amount_paise=bill.amount_paise,
             acceptance_date=bill.acceptance_date or bill.issue_date,
             now=now,
+            bank_rate_bps=get_settings().statutory_bank_rate_bps,
         )
         rows.append(row)
         amounts.append(bill.amount_paise)

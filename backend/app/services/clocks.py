@@ -9,6 +9,7 @@ from findesk_shared import uuid7
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.books_repo import BooksRepo
 from app.db.models import Invoice, StatutoryClock
 from app.services.statutory import clock_snapshot
@@ -30,7 +31,12 @@ async def recompute_clocks(
     out = []
     for inv in invoices:
         acceptance = inv.acceptance_date or inv.issue_date
-        snap = clock_snapshot(acceptance_date=acceptance, amount_paise=inv.amount_paise, now=now)
+        snap = clock_snapshot(
+            acceptance_date=acceptance,
+            amount_paise=inv.amount_paise,
+            now=now,
+            bank_rate_bps=get_settings().statutory_bank_rate_bps,
+        )
         clock = clocks.get(inv.id)
         if clock is None:
             clock = StatutoryClock(

@@ -69,3 +69,12 @@ def test_totals_bucket_by_band():
 def test_medium_enterprises_are_outside_43bh():
     assert "medium" not in MSE_STATUSES
     assert {"micro", "small"} <= MSE_STATUSES
+
+
+def test_settings_default_rate_matches_engine_default():
+    # config override exists so deployments can track RBI revisions; the two
+    # defaults must not silently drift apart
+    from app.config import Settings
+    from app.services.statutory import DEFAULT_BANK_RATE_BPS
+
+    assert Settings().statutory_bank_rate_bps == DEFAULT_BANK_RATE_BPS

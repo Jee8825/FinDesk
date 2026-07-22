@@ -32,6 +32,11 @@ class Settings(BaseSettings):
 
     otel_service_name: str = "findesk-backend"
 
+    # RBI bank rate in bps — §16 interest = 3× this. Re-verify against
+    # rbi.org.in after every MPC revision; override here per deployment
+    # (services/statutory.py documents the protocol).
+    statutory_bank_rate_bps: int = 675
+
     # TallyPrime HTTP-XML gateway (tools/tally). "fixture" exercises the real
     # connector against checked-in gateway XML (clearly labelled in responses);
     # "live" posts to tally_gateway_url — point it at a running TallyPrime.
