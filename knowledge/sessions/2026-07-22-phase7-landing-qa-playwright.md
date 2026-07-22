@@ -32,6 +32,14 @@ permalink: findesk/sessions/2026-07-22-phase7-landing-qa-playwright
    inline share link, roster tenants). `npm run test:e2e` /
    `make test-e2e`. **13/13 in ~10s** against the dev_up stack.
 4. Anthropic key in `memory/.env` rotated (human-done, was flagged 07-15).
+5. **contracts/api.yaml made valid OpenAPI** — CI's OpenAPI lint is
+   path-filtered, and this PR's `/agent/health` contract change re-ran it
+   for the first time since Phase 5, surfacing two latent errors: the
+   `/receivables/radar` summary was an unquoted flow scalar (commas split
+   "accrued interest"/"escalation states" into invalid operation keys), and
+   none of the 10 parameterized paths declared their `parameters`. Both
+   fixed; `openapi-spec-validator` green; shared/ regenerated (digest bump
+   only).
 
 ## Gotchas (durable)
 - **npm cache strips large binaries** on this machine:
@@ -49,6 +57,12 @@ permalink: findesk/sessions/2026-07-22-phase7-landing-qa-playwright
 - Playwright specs: the Data Room share URL is an `<input value=…>` —
   `getByText` can't match input values, use
   `locator('input[value*="/share?token="]')`.
+- **Path-filtered CI hides latent failures**: jobs gated on `changes`
+  (contracts, etc.) can stay green for phases while their input is broken —
+  the first PR to touch that path inherits the blame. When a filtered job
+  fails, check `git log` on the offending lines before assuming the PR
+  introduced it (and pre-run `pipx run openapi-spec-validator
+  contracts/api.yaml` whenever touching contracts).
 
 ## Residual
 - CI does not run the e2e suite (needs full stack; deliberate). Candidate:
