@@ -25,7 +25,7 @@ const RUN_VERBS: Record<string, string> = {
   reconciliation: "Reconciled statement lines",
   collections: "Drafted collection chases",
   working_capital: "Ranked working-capital options",
-  enforcer: "Checked 45-day escalations",
+  enforcer: "Refreshed 45-day interest telemetry",
   ping: "Health check",
 };
 
@@ -183,7 +183,15 @@ export default function BriefPage() {
                         {formatINR(i.amount_paise)}
                       </div>
                       <Pill tone={i.clock.escalation_level === "none" ? "neutral" : "bad"}>
-                        {i.clock.escalation_level === "none" ? "watch" : i.clock.escalation_level}
+                        {
+                          {
+                            none: "watch",
+                            nudge: "nudge",
+                            reminder: "reminder",
+                            act_letter: "letter ready",
+                            samadhaan_prep: "samadhaan ready",
+                          }[i.clock.escalation_level] ?? i.clock.escalation_level
+                        }
                       </Pill>
                     </div>
                   </li>

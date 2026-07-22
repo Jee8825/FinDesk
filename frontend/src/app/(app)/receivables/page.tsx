@@ -22,8 +22,8 @@ const RUNG: Record<string, { label: string; tone: "neutral" | "warn" | "bad" | "
   none: { label: "within time", tone: "good" },
   nudge: { label: "nudge", tone: "warn" },
   reminder: { label: "reminder", tone: "warn" },
-  act_letter: { label: "act letter", tone: "bad" },
-  samadhaan_prep: { label: "samadhaan prep", tone: "bad" },
+  act_letter: { label: "letter ready", tone: "bad" },
+  samadhaan_prep: { label: "samadhaan ready", tone: "bad" },
 };
 
 function ClockRow({ item }: { item: RadarItem }) {
@@ -71,7 +71,7 @@ function ClockRow({ item }: { item: RadarItem }) {
             overdue ? "text-blush" : "text-accent-soft"
           }`}
         >
-          {overdue ? "Escalate →" : "Chase →"}
+          {overdue ? "Review options →" : "Chase →"}
         </Link>
       </td>
     </motion.tr>
@@ -93,12 +93,12 @@ export default function ReceivablesPage() {
     <PageShell
       title="45-Day Radar"
       surface="dark"
-      subtitle="Statutory clock per invoice, accrued interest, escalation rung"
+      subtitle="Statutory clock per invoice — interest telemetry you hold, artifacts ready when you choose"
       annotation="GET /receivables/radar · deterministic clock engine"
     >
       <p className="mono-annot mb-5">
-        ◇ signature surface · statutory 45-day msme clock per invoice · accrued interest computed
-        deterministically
+        ◇ signature surface · statutory 45-day msme clock per invoice · interest is telemetry —
+        leverage you hold, not letters we send · nothing leaves without your approval
       </p>
 
       {radar.isLoading && (
