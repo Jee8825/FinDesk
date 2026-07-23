@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import jwt as pyjwt
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 
 from app.auth.deps import Auth
+from app.auth.ratelimit import (
+    LOGIN_LIMIT,
+    REFRESH_LIMIT,
+    enforce_rate,
+    is_revoked,
+    revoke_jti,
+)
 from app.auth.security import decode_token, mint_token, verify_password
 from app.db import session_scope
 from app.db.repositories import TenantRepo, UserRepo
@@ -51,7 +58,9 @@ def _pair(user_id: str, tenant_id: str, role: str) -> TokenPair:
 
 
 @router.post("/auth/login", response_model=TokenPair)
-async def login(body: LoginRequest) -> TokenPair:
+async def login(body: LoginRequest, request: Request) -> TokenPair:
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate("login", f"{ip}:{body.email.lower()}", limit=LOGIN_LIMIT)
     async with session_scope() as session:
         users = UserRepo(session)
         user = await users.by_email(body.email.lower())
@@ -69,12 +78,38 @@ class RefreshRequest(BaseModel):
 
 
 @router.post("/auth/refresh", response_model=TokenPair)
-async def refresh(body: RefreshRequest) -> TokenPair:
+async def refresh(body: RefreshRequest, request: Request) -> TokenPair:
+    """Rotation (B1): every refresh revokes the presented token's jti and
+    mints a new pair — a stolen refresh token dies the moment either party
+    uses it, instead of living out its 14 days."""
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate("refresh", ip, limit=REFRESH_LIMIT)
     try:
         payload = decode_token(body.refresh_token, expected="refresh")
     except pyjwt.PyJWTError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid refresh token") from exc
+    if await is_revoked(payload.get("jti")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "refresh token revoked")
+    if payload.get("jti"):
+        await revoke_jti(payload["jti"], int(payload["exp"]))
     return _pair(payload["sub"], payload["ten"], payload["role"])
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/auth/logout")
+async def logout(body: LogoutRequest) -> dict[str, bool]:
+    """Server-side logout: revoke the refresh token's jti. Idempotent; an
+    already-invalid token is a no-op success (the goal state is 'dead')."""
+    try:
+        payload = decode_token(body.refresh_token, expected="refresh")
+    except pyjwt.PyJWTError:
+        return {"ok": True}
+    if payload.get("jti"):
+        await revoke_jti(payload["jti"], int(payload["exp"]))
+    return {"ok": True}
 
 
 @router.get("/me", response_model=MeOut)

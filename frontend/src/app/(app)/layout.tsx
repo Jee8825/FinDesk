@@ -298,6 +298,7 @@ function Sidebar() {
         <AgentHealthBadge />
         <button
           onClick={() => {
+            void api.logout(); // B1: revoke the refresh jti server-side
             clearTokens();
             router.replace("/login");
           }}

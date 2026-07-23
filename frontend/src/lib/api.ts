@@ -485,6 +485,15 @@ export type CloseChecklistOut = {
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  logout: () => {
+    // best-effort server-side revocation; local clear happens regardless
+    const refresh =
+      typeof window === "undefined" ? null : window.localStorage.getItem(REFRESH_KEY);
+    if (!refresh) return Promise.resolve({ ok: true });
+    return request<{ ok: boolean }>("POST", apiPaths.POST_AUTH_LOGOUT, {
+      refresh_token: refresh,
+    }).catch(() => ({ ok: true }));
+  },
   dataroom: () => request<DataRoom>("GET", apiPaths.GET_DATAROOM),
   shareDataroom: () =>
     request<{ share_token: string; expires_in_days: number }>(

@@ -36,11 +36,14 @@ def mint_token(*, user_id: str, tenant_id: str, role: str, kind: TokenType) -> s
         if kind == "access"
         else timedelta(days=settings.refresh_token_ttl_days)
     )
+    from findesk_shared import uuid7
+
     payload = {
         "sub": user_id,
         "ten": tenant_id,
         "role": role,
         "typ": kind,
+        "jti": uuid7(),  # refresh rotation/revocation handle (B1)
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
     }

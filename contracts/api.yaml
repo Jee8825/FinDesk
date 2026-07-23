@@ -40,7 +40,9 @@ paths:
       summary: Email+password login (optional TOTP step-up)
       responses: { "200": { description: tokens } }
   /auth/refresh:
-    post: { tags: [auth], security: [], summary: Rotate refresh token, responses: { "200": { description: tokens } } }
+    post: { tags: [auth], security: [], summary: "Rotate refresh token — presented jti is revoked, new pair minted (B1); rate-limited", responses: { "200": { description: tokens } } }
+  /auth/logout:
+    post: { tags: [auth], security: [], summary: Revoke a refresh token's jti server-side (idempotent), responses: { "200": { description: ok } } }
   /me:
     get: { tags: [auth], summary: Current user + memberships, responses: { "200": { description: profile } } }
   /tenants/{tenant_id}/switch:
