@@ -53,3 +53,40 @@ migration = pre-pilot gate; B4 contract codegen CI (shapes hand-mirrored
 both sides today). Layer CLAUDE.mds drifted from reality (5 claims listed
 in report). SSE server path is production-grade — keep. Add-on build lists
 for F1–F6 are in the report, per layer, with effort.
+
+## Part 3 — Autonomous build session (same day): all phases shipped
+
+13 phases, 12 commits on feat/crucible-hardening. Everything live-verified
+against the running stack, gates green at close:
+**161 py-unit (69 backend / 60 agents / 32 tools) · 33/33 Playwright
+(incl. 3 IMS + 6 axe-a11y) · ruff clean · tsc/eslint clean · prod build ✓
+· migrations through 0016 · contracts regen no-drift (48 ops).**
+
+Shipped: FE1/FE2 stream correctness (useGraphRun replaces 3 timer
+invalidates; reconnect+poll-fallback hook) · layer CLAUDE.md honesty ·
+**F1 IMS Copilot** end-to-end (ims tool + 0014 + classify tiers + gated
+set_state in decide_approval + /ims triage page; live: PB-889 accept →
+receipt with token) · **F5 Run Viewer** (/runs + /runs/[id], durations,
+critic-gate chip; live: 5-step forecast run, 43ms) · FE3 infinite cursor
++ FE7 ApiError · **F3 outcome loop** (payment_promises 0015, late_phrase
+shared twin, recon settle hook writes lateness+PTP outcomes to Recall,
+radar PTP capture; live-verified) · **F4 Udyam verify** (udyam tool +
+0016 + effective_mse verified-beats-tag; live: Kaveri small→medium drift
+excluded bill + alert) · **F2 close checklist** (8 evidence checks,
+blockers/warnings, audited signoff, close pack via shared
+build_export_payload; live: honestly blocked on 19 unmatched) ·
+**B1/B2/B3** (login 5/min + refresh rotation w/ jti denylist + logout —
+live: 429 on 6th, replay 401; /readyz; X-Request-ID) · polish (formatIST
+everywhere, terrain code-split, axe-enforced WCAG on 6 surfaces).
+
+Deliberately NOT done: F6 CA rollup (cross-tenant read vs hard rule 6 —
+needs a human decision on membership-scoped aggregation); FE4 cookie
+migration (deferred pre-pilot, documented); month_end_close as agent
+GRAPH (composition service delivers the value; graph wrapper is a later
+lap); heavy skill-audit passes at session end (context spent on
+shipping+verifying; axe CI check embodies the a11y audit permanently).
+
+Gotchas added: e2e specs must wait-for-data before branching on
+row-count; code-split chunks need expect.poll on canvas size; the
+limiter counts successful logins too (clear auth:rl:* between manual
+tests); receipts land relative to backend cwd (backend/var/...).

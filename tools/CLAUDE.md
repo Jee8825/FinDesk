@@ -5,9 +5,11 @@ schemas in `contracts/tools.md`.
 
 MCP servers wrapping external systems.
 **Implemented:** bank_statements, ledger_import, tally (TallyPrime HTTP-XML
-gateway, fixture-driven), email (sandbox provider), treds (sandbox provider).
+gateway, fixture-driven), email (sandbox provider), treds (sandbox provider),
+ims (fixture GSP records; set_state token-gated), udyam (fixture register
+verify, read-only).
 **Planned (contracts reserved, no code yet):** account_aggregator (blocked on
-FIU/TSP partnership), zoho_books, gst_portal, ims, einvoice.
+FIU/TSP partnership), zoho_books, gst_portal, einvoice.
 
 ## Rules for agents working here
 1. Tools are plumbing: fetch, normalize, submit. NO business logic, NO

@@ -9,7 +9,11 @@ test("palette opens with ctrl+k and navigates to Forecast", async ({ page }) => 
 
   await input.fill("forecast");
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Forecast" })).toBeVisible();
+  // forecast's terrain chunk is code-split — allow the route transition +
+  // chunk fetch under full-suite load
+  await expect(page.getByRole("heading", { name: "Forecast" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page).toHaveURL(/\/forecast/);
 });
 

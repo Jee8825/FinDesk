@@ -7,8 +7,11 @@ test("forecast shows the 3D terrain canvas with orbit hint", async ({ page }) =>
   await expect(page.getByText(/drag to orbit/)).toBeVisible({ timeout: 45_000 });
   const canvas = page.locator("canvas").last();
   await expect(canvas).toBeVisible();
-  const box = await canvas.boundingBox();
-  expect(box!.height).toBeGreaterThan(250);
+  // the terrain is code-split (next/dynamic): the canvas mounts small and
+  // grows as fiber measures its container — poll to the settled size
+  await expect
+    .poll(async () => (await canvas.boundingBox())?.height ?? 0, { timeout: 10_000 })
+    .toBeGreaterThan(250);
   // fallback escape hatch is offered
   await expect(page.getByRole("button", { name: "classic 2D" })).toBeVisible();
 });

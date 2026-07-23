@@ -38,6 +38,7 @@ Honesty is a feature. What exists versus what is roadmap:
 | TReDS | **Sandbox** | Recommendation quotes only; FinDesk never lists or discounts invoices itself |
 | Account Aggregator (bank feeds) | **Roadmap** | Requires an FIU partnership (regulated-entity gate) — planned via TSP integration |
 | GST IMS (ITC triage) | **Fixture** | Real match→recommend→approve loop over checked-in GSP-shaped records; accept/reject executes only behind the approval gate. Live mode = GSP adapter, roadmap |
+| Udyam verification | **Fixture** | Read-only register lookups; verified category scopes §15/43B(h), drift alerts on tag-vs-register disagreement. Live = IDfy/AuthBridge-class adapter |
 | Zoho Books API, GST portal, e-invoice | **Roadmap** | Contracts reserved in `contracts/tools.md` |
 
 ## Quickstart (dev)
