@@ -118,3 +118,24 @@ def test_bill_beyond_horizon_is_ignored_and_overdue_lands_week_zero():
     weeks = result["scenarios"]["base"]
     assert weeks[0]["outflow_paise"] == 2_000_000  # already-due money is this week's problem
     assert sum(w["outflow_paise"] for w in weeks) == 2_000_000  # beyond-horizon ignored
+
+
+def test_bill_outflow_drivers_are_tagged_and_gap_ignores_them():
+    result = project(
+        start=START,
+        opening_balance_paise=1_000_000,  # small opening → guaranteed gap
+        open_invoices=[_invoice("2026-09-25T00:00:00+00:00")],  # inflow near horizon end
+        avg_late_by_client={"c1": 0.0},
+        monthly_outflows={},
+        open_bills=[_bill("PB-1", "Vega", 5_000_000, "2026-07-16T00:00:00+00:00")],
+    )
+    week2 = result["scenarios"]["base"][2]
+    out = [d for d in week2["drivers"] if d.get("kind") == "out"]
+    assert out == [
+        {"kind": "out", "bill_number": "PB-1", "vendor": "Vega",
+         "amount_paise": 5_000_000, "expected": "2026-07-16"}
+    ]
+    gap = result["gap"]
+    assert gap is not None
+    # attribution lists inflow levers only — a bill is not money you can chase
+    assert all(d.get("kind") != "out" for d in gap["delayed_inflows"])

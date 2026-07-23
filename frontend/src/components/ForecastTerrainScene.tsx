@@ -197,8 +197,20 @@ function WeekTooltip({ f, rows, week }: { f: ForecastOut; rows: Rows; week: numb
           </div>
         </div>
         {base.drivers.length > 0 && (
-          <div className="mono-annot mt-1.5 truncate">
-            ◇ {base.drivers[0].client} {formatINRCompact(base.drivers[0].amount_paise)}
+          <div className="mt-1.5 space-y-0.5">
+            {base.drivers.slice(0, 3).map((d, i) => (
+              <div key={i} className="mono-annot truncate">
+                {d.kind === "out" ? (
+                  <span className="text-blush">
+                    − {d.vendor} {formatINRCompact(d.amount_paise)} (bill due)
+                  </span>
+                ) : (
+                  <span>
+                    ◇ {d.client} {formatINRCompact(d.amount_paise)}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

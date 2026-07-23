@@ -150,6 +150,15 @@ def project(
             # firm dated outflows land in their due week in every scenario —
             # what we owe does not move with how clients pay us
             weeks[idx]["outflow_paise"] += bill["outstanding_paise"]
+            weeks[idx]["drivers"].append(
+                {
+                    "kind": "out",  # absent kind = inflow (pre-lap-3 rows)
+                    "bill_number": bill["number"],
+                    "vendor": bill["vendor"],
+                    "amount_paise": bill["outstanding_paise"],
+                    "expected": bill["due_date"][:10],
+                }
+            )
         balance = opening_balance_paise
         for week in weeks:
             balance += week["inflow_paise"] - week["outflow_paise"]
@@ -182,6 +191,7 @@ def detect_gap(scenarios: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | N
                     d
                     for w in scenarios[scenario][week["week"] :]
                     for d in w["drivers"]
+                    if d.get("kind") != "out"  # gap levers are inflows, not bills
                 ]
                 return {
                     "scenario": scenario,

@@ -315,7 +315,16 @@ export type ForecastWeek = {
   inflow_paise: number;
   outflow_paise: number;
   closing_paise: number;
-  drivers: { invoice_number: string; client: string; amount_paise: number; expected: string }[];
+  drivers: {
+    // kind absent = inflow (invoice); "out" = dated vendor bill leaving
+    kind?: "out";
+    invoice_number?: string;
+    client?: string;
+    bill_number?: string;
+    vendor?: string;
+    amount_paise: number;
+    expected: string;
+  }[];
 };
 
 export type ForecastOut = {

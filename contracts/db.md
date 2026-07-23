@@ -57,7 +57,9 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
 - **forecasts**: version, horizon `4w|13w`, scenario `base|upside|downside`,
   generated_at, run_id
 - **forecast_lines**: forecast_id, week_start, inflow_paise, outflow_paise,
-  closing_paise, drivers jsonb (traceability to invoices/behaviors)
+  closing_paise, drivers jsonb (traceability: inflow drivers carry
+  invoice_number/client; entries with `kind:"out"` are dated vendor bills
+  leaving in that week — absent kind = inflow, pre-existing rows unchanged)
 - **wc_actions**: kind `treds|collect|retime`, unlock_paise, cost_paise,
   detail jsonb, rank, status `proposed|approved|executed|rejected`,
   policy_verdicts jsonb
