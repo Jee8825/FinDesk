@@ -172,6 +172,36 @@ class Bill(TimestampedTenanted, Base):
     )
 
 
+class ImsRecord(TimestampedTenanted, Base):
+    """A supplier-filed document in the tenant's GST IMS queue (F1).
+
+    Sync is upsert-by-record_key; a decided state (accepted/rejected) is
+    terminal for sync — re-pulls refresh pending rows only, mirroring the
+    bills 'paid is terminal' rule. State changes execute only inside
+    decide_approval with a minted token.
+    """
+
+    __tablename__ = "ims_records"
+    __table_args__ = (UniqueConstraint("tenant_id", "record_key", name="uq_ims_tenant_key"),)
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    record_key: Mapped[str] = mapped_column(String(120))  # gstin:doc_type:number
+    supplier_gstin: Mapped[str] = mapped_column(String(15))
+    supplier_name: Mapped[str] = mapped_column(String(200))
+    doc_type: Mapped[str] = mapped_column(String(12), default="invoice")
+    doc_number: Mapped[str] = mapped_column(String(50))
+    doc_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period: Mapped[str] = mapped_column(String(7))  # e.g. "2026-07"
+    taxable_value_paise: Mapped[int] = mapped_column(BigInteger)
+    tax_paise: Mapped[int] = mapped_column(BigInteger)  # the ITC at stake
+    total_paise: Mapped[int] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    match_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    matched_bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    recommendation: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
 class Match(TimestampedTenanted, Base):
     __tablename__ = "matches"
 

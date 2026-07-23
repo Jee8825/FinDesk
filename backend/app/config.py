@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     tally_gateway_url: str = "http://localhost:9000"
     tally_company: str | None = None
 
+    # GST IMS (tools/ims). "fixture" replays checked-in records through the
+    # real match/approve loop; "live" needs a GSP adapter (roadmap) and
+    # refuses to construct until one exists.
+    ims_mode: str = "fixture"  # fixture | live
+    ims_actions_dir: str = "var/ims"  # sandbox set_state receipts
+
 
 @lru_cache
 def get_settings() -> Settings:

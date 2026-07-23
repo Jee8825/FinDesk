@@ -39,8 +39,16 @@ calls in CI. `list_invoices` reads Bills Receivable (Sundry Debtors),
 - `return_summary(period) → { gstr1_status, gstr3b_status, liability_paise, itc_paise }`
 
 ## ims@v1
-- `list_pending() → { invoices: [{ irn, supplier_gstin, amount_paise, state: pending|accepted|rejected }] }`
-- `set_state(irn, state)` ⚠
+- `pull_records(period) → [ImsRecord]` — supplier-filed docs visible in the
+  tenant's IMS queue: `{ supplier_gstin, supplier_name, doc_type
+  invoice|credit_note|debit_note, doc_number, doc_date, period,
+  taxable_value_paise, tax_paise, total_paise, state
+  pending|accepted|rejected }`; identity key = `gstin:doc_type:doc_number`
+- `set_state(record_key, state, approval_token)` ⚠ — refuses without a token
+  (`ImsActionRefused`), refuses `state=pending`; returns an action receipt
+  `{ action_id, record_key, state, acted_at, approval_token }`
+- Sandbox: fixture-driven records + receipts under `var/ims/<tenant>/`;
+  live mode = GSP adapter (roadmap), same surface + same token gate
 
 ## einvoice@v1
 - `fetch_by_irn(irn) → { invoice: EInvoiceDoc }`

@@ -34,6 +34,12 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
   source jsonb
 - **invoices** / **bills**: counterparty_id, number, issue_date, due_date,
   acceptance_date?, amount_paise, gst jsonb, tds jsonb, irn?, status
+- **ims_records** (`0014`): record_key (unique per tenant —
+  `gstin:doc_type:doc_number`), supplier_gstin, supplier_name, doc_type,
+  doc_number, doc_date, period, taxable_value_paise, tax_paise, total_paise,
+  state `pending|accepted|rejected` (decided is terminal for sync; flips only
+  inside decide_approval), match_tier?, matched_bill_number?,
+  recommendation `accept|review`?, note?
 - **expenses**: counterparty_id?, date, amount_paise, category_code?, document_id?
 - **matches**: bank_transaction_id, target (invoice|bill|expense + id), kind
   `full|partial|fee|tds_adjusted`, confidence numeric, matched_by `agent|human`,

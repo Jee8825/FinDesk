@@ -1,0 +1,77 @@
+{
+  "_comment": "Sandbox IMS queue — shaped like GSP IMS API output. Doc numbers deliberately overlap tools/findesk_tools/tally/fixtures/bills_payable.xml so every match tier fires in a live demo: PB-889 exact, PB-901 ₹50 tolerant delta, PB-870 settled bill, VL-2209 ghost bill, Meridian unknown supplier, CN-12 credit note. Tax split assumes 18% GST; taxable+tax always sums to total exactly.",
+  "records": [
+    {
+      "supplier_gstin": "33AAACS1234F1Z5",
+      "supplier_name": "Sundaram Packaging (Udyam MSE)",
+      "doc_type": "invoice",
+      "doc_number": "PB-889",
+      "doc_date": "2026-06-12",
+      "period": "2026-06",
+      "taxable_value_paise": 4432203,
+      "tax_paise": 797797,
+      "total_paise": 5230000,
+      "state": "pending"
+    },
+    {
+      "supplier_gstin": "29AABCV5678L1Z8",
+      "supplier_name": "Vega Logistics Pvt Ltd",
+      "doc_type": "invoice",
+      "doc_number": "PB-901",
+      "doc_date": "2026-06-30",
+      "period": "2026-06",
+      "taxable_value_paise": 66106780,
+      "tax_paise": 11898220,
+      "total_paise": 78005000,
+      "state": "pending"
+    },
+    {
+      "supplier_gstin": "33AAACS1234F1Z5",
+      "supplier_name": "Sundaram Packaging (Udyam MSE)",
+      "doc_type": "invoice",
+      "doc_number": "PB-870",
+      "doc_date": "2026-05-02",
+      "period": "2026-05",
+      "taxable_value_paise": 5423729,
+      "tax_paise": 976271,
+      "total_paise": 6400000,
+      "state": "pending"
+    },
+    {
+      "supplier_gstin": "29AABCV5678L1Z8",
+      "supplier_name": "Vega Logistics Pvt Ltd",
+      "doc_type": "invoice",
+      "doc_number": "VL-2209",
+      "doc_date": "2026-07-04",
+      "period": "2026-07",
+      "taxable_value_paise": 10000000,
+      "tax_paise": 1800000,
+      "total_paise": 11800000,
+      "state": "pending"
+    },
+    {
+      "supplier_gstin": "27AABCM9012K1Z3",
+      "supplier_name": "Meridian Traders",
+      "doc_type": "invoice",
+      "doc_number": "MT-4471",
+      "doc_date": "2026-07-11",
+      "period": "2026-07",
+      "taxable_value_paise": 20000000,
+      "tax_paise": 3600000,
+      "total_paise": 23600000,
+      "state": "pending"
+    },
+    {
+      "supplier_gstin": "29AABCV5678L1Z8",
+      "supplier_name": "Vega Logistics Pvt Ltd",
+      "doc_type": "credit_note",
+      "doc_number": "CN-12",
+      "doc_date": "2026-07-08",
+      "period": "2026-07",
+      "taxable_value_paise": 1694915,
+      "tax_paise": 305085,
+      "total_paise": 2000000,
+      "state": "pending"
+    }
+  ]
+}
