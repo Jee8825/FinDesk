@@ -73,6 +73,8 @@ jobs:
               (cd "$ws" && python -m pytest tests/unit -q) || exit 1
             fi
           done
+      - name: Contract surface guard (mounted routes ⇄ contracts/api.yaml)
+        run: python scripts/check_api_surface.py
 
   lint-frontend:
     needs: changes

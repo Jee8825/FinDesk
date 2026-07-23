@@ -88,9 +88,9 @@ paths:
       tags: [agent]
       summary: SSE stream of run events (shapes in contracts/events.md)
       responses: { "200": { description: text/event-stream } }
-  /agent/runs/{run_id}/cancel:
-    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
-    post: { tags: [agent], summary: Cancel a run, responses: { "200": { description: cancelled } } }
+  # roadmap (not mounted — scripts/check_api_surface.py enforces this file
+  # matches the app): POST /agent/runs/{run_id}/cancel needs worker
+  # cooperation (checkpoint + abort between nodes), not just a status flip.
   /agent/health:
     get:
       tags: [agent]
@@ -186,10 +186,11 @@ paths:
       summary: Composed evidence chain (app provenance + memory why-chain)
       responses: { "200": { description: evidence trail } }
 
-  /webhooks/aa/consent:
-    post: { tags: [webhooks], security: [], summary: Account Aggregator consent callback (signed), responses: { "200": { description: ok } } }
-  /webhooks/email/events:
-    post: { tags: [webhooks], security: [], summary: Email delivery/open/reply events (signed), responses: { "200": { description: ok } } }
+  # roadmap webhooks (declared here again when their integrations land;
+  # the surface guard fails CI on any path this file claims but the app
+  # doesn't mount): POST /webhooks/aa/consent (needs the AA TSP/FIU
+  # partnership), POST /webhooks/email/events (needs a real email provider
+  # — the sandbox writes .eml files and emits no events).
 
 components:
   securitySchemes:

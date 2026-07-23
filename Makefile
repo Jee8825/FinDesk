@@ -48,6 +48,7 @@ test-int:      ## integration tests (testcontainers)
 
 contracts:     ## regenerate shared/ from contracts/ (CI fails on drift)
 	$(PY) scripts/gen_contracts.py
+	$(PY) scripts/check_api_surface.py
 
 smoke:         ## weekly end-to-end smoke (docs/team/collaboration.md §4)
 	$(PY) scripts/smoke_e2e.py
