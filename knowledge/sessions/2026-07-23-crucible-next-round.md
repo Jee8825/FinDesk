@@ -90,3 +90,25 @@ Gotchas added: e2e specs must wait-for-data before branching on
 row-count; code-split chunks need expect.poll on canvas size; the
 limiter counts successful logins too (clear auth:rl:* between manual
 tests); receipts land relative to backend cwd (backend/var/...).
+
+## Part 4 — "do next what needed": PR + guard + close graph + DPDP
+
+- Pushed 12 commits; opened PR #18 (base main).
+- **B4 shipped**: scripts/check_api_surface.py — mounted /api/v1 routes ⇄
+  api.yaml, both directions, in CI (test-python) + make contracts. First
+  run caught 3 phantoms (runs/cancel, both webhooks) → demoted to roadmap
+  comments; registry now 45 real ops.
+- **month_end_close graph shipped** (catalog's last planned entry):
+  fetch_checklist → critic (reducer cross-check, 7 pure tests) → persist
+  (close.checklist_run audit; NEVER sign-off — human act stays on public
+  API). Internal /close/context + /close/run; palette + CloseCard "Run
+  close agent". Live: succeeded 32ms, blockers=2, ready=false honest.
+- **W2**: docs/product/dpdp-posture.md — clock, data inventory, built
+  posture, pre-pilot gap list (erasure vs never-hard-delete tension noted).
+- Ops gotchas: `next build` while dev server runs corrupts .next
+  (vendor-chunks error) → rm -rf .next + restart; Recall API (:18000) +
+  embedding shim (:8090) are host processes that die with the terminal —
+  smoke's agent-health spec fails until restarted (dev_up.sh has the
+  exact invocations).
+- Still open for a human: F6 CA rollup design; FE4 cookie migration;
+  live-Tally banked proof (needs a running TallyPrime).
