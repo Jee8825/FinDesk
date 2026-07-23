@@ -90,6 +90,18 @@ export async function authorizedFetch(
   return res;
 }
 
+/** Typed API failure: pages can branch on status (403 vs 422 vs 500)
+ *  instead of string-matching a message. message stays human-readable. */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+  ) {
+    super(detail);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await authorizedFetch(`${API_PREFIX}${path}`, {
     method,
@@ -97,8 +109,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.detail ?? `${method} ${path} → ${res.status}`);
+    const payload = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      typeof payload.detail === "string" ? payload.detail : `${method} ${path} → ${res.status}`,
+    );
   }
   return res.json() as Promise<T>;
 }
@@ -516,11 +531,16 @@ export const api = {
       apiPaths.POST_APPROVALS_APPROVAL_ID_DECIDE.replace("{approval_id}", id),
       { decision, rationale },
     ),
-  transactions: (statusFilter?: string) =>
-    request<TxnPage>(
+  transactions: (statusFilter?: string, cursor?: string) => {
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status_filter", statusFilter);
+    if (cursor) params.set("cursor", cursor);
+    const qs = params.toString();
+    return request<TxnPage>(
       "GET",
-      `${apiPaths.GET_BOOKS_TRANSACTIONS}${statusFilter ? `?status_filter=${statusFilter}` : ""}`,
-    ),
+      `${apiPaths.GET_BOOKS_TRANSACTIONS}${qs ? `?${qs}` : ""}`,
+    );
+  },
   exceptions: () => request<TxnPage>("GET", apiPaths.GET_BOOKS_EXCEPTIONS),
   switchTenant: (tenantId: string) =>
     request<TokenPair>(

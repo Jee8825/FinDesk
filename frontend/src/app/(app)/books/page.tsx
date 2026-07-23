@@ -1,7 +1,7 @@
 "use client";
 // Transactions — "Master table" (wireframe Transactions A): normalized feed,
 // server state chips, per-row Why?, inline category correction, imports.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Upload } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -85,11 +85,19 @@ function BooksPageInner() {
   }, [searchParams]);
   const { done } = useRunStream(runId);
 
-  const txns = useQuery({
+  // FE3: cursor pagination for real — the server clamps pages at 500; the
+  // old client never sent the cursor back, dead-ending the list at page one
+  const txns = useInfiniteQuery({
     queryKey: ["transactions"],
-    queryFn: () => api.transactions(),
+    queryFn: ({ pageParam }) => api.transactions(undefined, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
     refetchInterval: runId && !done ? 2000 : false,
   });
+  const allItems = useMemo(
+    () => txns.data?.pages.flatMap((p) => p.items) ?? [],
+    [txns.data],
+  );
   const accounts = useQuery({
     queryKey: ["chart-of-accounts"],
     queryFn: () => api.chartOfAccounts(),
@@ -145,7 +153,7 @@ function BooksPageInner() {
     }
   }
 
-  const counts = txns.data?.counts ?? {};
+  const counts = txns.data?.pages[0]?.counts ?? {};
   const chips = [
     { key: "all", label: "All states" },
     { key: "matched", label: `Matched ${counts.matched ?? 0}` },
@@ -153,7 +161,7 @@ function BooksPageInner() {
   ];
 
   const rows = useMemo(() => {
-    let items = txns.data?.items ?? [];
+    let items = allItems;
     if (filter !== "all") items = items.filter((t) => t.match_status === filter);
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
@@ -165,7 +173,7 @@ function BooksPageInner() {
       );
     }
     return items;
-  }, [txns.data, filter, q]);
+  }, [allItems, filter, q]);
 
   return (
     <PageShell
@@ -320,9 +328,22 @@ function BooksPageInner() {
         </Card>
       )}
       {txns.data && (
-        <p className="mono-annot mt-3">
-          showing {rows.length} of {txns.data.items.length} loaded · {counts.matched ?? 0} matched · {counts.unmatched ?? 0} for review
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <p className="mono-annot">
+            showing {rows.length} of {allItems.length} loaded ·{" "}
+            {Object.values(counts).reduce((a, b) => a + b, 0)} total · {counts.matched ?? 0}{" "}
+            matched · {counts.unmatched ?? 0} for review
+          </p>
+          {txns.hasNextPage && (
+            <button
+              onClick={() => void txns.fetchNextPage()}
+              disabled={txns.isFetchingNextPage}
+              className="mono-label rounded-md border border-line px-3 py-1.5 text-mute transition-colors hover:text-ink disabled:opacity-40"
+            >
+              {txns.isFetchingNextPage ? "loading…" : "load more"}
+            </button>
+          )}
+        </div>
       )}
 
       {whyRefs && <WhyDrawer refs={whyRefs} onClose={() => setWhyRefs(null)} />}
