@@ -122,3 +122,28 @@ Judge pass over lap-1 output + foundations, then Q1–Q7. Full detail:
 Gates at lap-2 close: **121 unit** (backend 43 · agents 54 · tools 24) ·
 tsc 0 · eslint 0 · **Playwright 24/24** · prod build ✓ · no contract drift ·
 migrations → 0013. 7 commits this lap.
+
+---
+
+## Lap 3 (2026-07-23) — trust artifacts + critic seat
+
+- **R1** credit-pack export: `GET /dataroom/export` zip (summary.md with score
+  table + audit head hash, 3 CSVs), pure builders in
+  `services/dataroom_export.py`, download button. Judge catch en route:
+  lap-2's verify_chain duplicated dataroom's walker → consolidated (audit.py
+  canonical, dataroom adapts shape). `gather_items` moved to services/payables
+  (shared route+export).
+- **R2** forecast critic: `critic.py` pure invariants wired
+  project→critic→persist; violation fails the run. Test lesson: a mid-chain
+  point edit breaks TWO continuity links (edit + wake) — expect both.
+- **R3** bill drivers: engine tags `kind:"out"`; gap attribution filters to
+  inflows; terrain hover renders − vendor bills in claret; db.md documents
+  absent-kind=inflow backward compat.
+- Live proofs: forecast run through critic (succeeded), out-drivers persisted,
+  narrative bill total = exact paise sum of all 6 open bills, credit pack 4
+  files with verified chain head.
+- Playwright gotcha refined: first 1-2 full runs after a dev-server restart
+  can each drop one heavy spec (three.js compile) — warm then definitive.
+
+Gates: **131 unit** (47/60/24) · 24/24 e2e · prod build · no drift.
+Lap totals: lap-1 8 commits, lap-2 7, lap-3 4.

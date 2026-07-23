@@ -160,3 +160,23 @@ architecture. Method unchanged: find it, prove it, fix it, re-verify.
 backend 43 · agents 54 · tools 24 unit (121) · tsc 0 · eslint 0 ·
 Playwright 24/24 · prod build ✓ · contracts regen no-drift ✓ ·
 migrations through 0013.
+
+---
+
+# Lap 3 — Trust artifacts + critic seat (2026-07-23)
+
+| Built | Why it survived the lenses | Proof |
+|---|---|---|
+| **Credit-pack export** (`GET /dataroom/export`) — zip of summary.md + receivables/payables/forecast CSVs | Lap-1 kill-log survivor; lenders underwrite from files, not dashboards; deterministic so a pack can be re-generated and diffed | 4 unit tests; live: 4 files, verified 102-entry chain head inside summary.md |
+| **Forecast critic node** — pure invariants (continuity, scenario length, non-negative flows, inflow-total ordering, gap self-consistency) between project and persist | The Critic seat existed in docs, not code; a wrong forward view is worse than none — fail loudly, persist nothing | 5 tests incl. real-engine-passes-clean; live run succeeded through the critic |
+| **Tagged bill drivers** (`kind:"out"`) in forecast weeks + terrain hover | Numbers without attribution were a half-shipped Q4; gap levers must exclude bills (you can't chase what you owe) | Live: stored forecast carries out-drivers; narrative total ₹10,00,500 = exact sum of all 6 open bills |
+
+**Judge catch on our own lap-2 work:** `verify_chain` (audit.py) duplicated
+`verify_audit_chain` (dataroom.py) — two copies of tamper-evidence had already
+drifted in shape. Consolidated to one walker with a shape adapter. The lesson
+is the crucible's own: re-attack the rebuilt version.
+
+## Gates at lap-3 close
+backend 47 · agents 60 · tools 24 unit (**131**) · tsc 0 · eslint 0 ·
+Playwright 24/24 · prod build ✓ · no contract drift. Live-verified: critic-in-
+the-loop forecast run, credit pack, out-drivers persisted.
