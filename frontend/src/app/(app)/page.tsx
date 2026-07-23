@@ -14,7 +14,7 @@ import {
   StatCard,
   stagger,
 } from "@/components/ui";
-import { api, formatINR, formatINRCompact, type ForecastOut } from "@/lib/api";
+import { api, formatINR, formatINRCompact, formatISTDate, type ForecastOut } from "@/lib/api";
 
 function runwayLabel(f?: ForecastOut): string {
   const base = f?.scenarios.base;
@@ -122,7 +122,7 @@ export default function Dashboard() {
             label="cash position"
             value={f?.opening_balance_paise ?? 0}
             format={formatINRCompact}
-            sub={f ? `opening balance · ${new Date(f.generated_at).toLocaleDateString("en-IN")}` : "run a forecast to compute"}
+            sub={f ? `opening balance · ${formatISTDate(f.generated_at)}` : "run a forecast to compute"}
           />
           <StatCard
             label="runway (base case)"

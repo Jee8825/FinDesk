@@ -147,6 +147,16 @@ export function formatINRCompact(amountPaise: number): string {
   return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
 }
 
+// FE5: "IST at the edge" for real — en-IN locale alone renders in the
+// BROWSER's timezone; every timestamp display goes through these.
+export function formatIST(d: string | number | Date): string {
+  return new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
+export function formatISTDate(d: string | number | Date): string {
+  return new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
 export function formatINR(amountPaise: number): string {
   const rupees = amountPaise / 100;
   return new Intl.NumberFormat("en-IN", {

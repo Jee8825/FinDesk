@@ -18,7 +18,7 @@ import {
   PrimaryBtn,
   Skeleton,
 } from "@/components/ui";
-import { api, formatINR, type Approval } from "@/lib/api";
+import { api, formatINR, formatIST, type Approval } from "@/lib/api";
 
 const KIND_META: Record<string, { chip: string; title: (a: Approval) => string }> = {
   send_email: {
@@ -55,7 +55,7 @@ function Dossier({ approval }: { approval: Approval }) {
         <div>
           <h2 className="text-xl font-bold tracking-[-0.01em] text-dark-text">{meta.title(approval)}</h2>
           <p className="mt-1 text-sm text-dark-mute">
-            drafted by agent · {new Date(approval.created_at).toLocaleString("en-IN")} · run{" "}
+            drafted by agent · {formatIST(approval.created_at)} · run{" "}
             {String(approval.requested_by.run_id ?? "?").slice(0, 13)}…
           </p>
         </div>

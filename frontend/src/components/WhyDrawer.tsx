@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link2, X } from "lucide-react";
 
-import { api, type WhyRef } from "@/lib/api";
+import { api, formatIST, type WhyRef } from "@/lib/api";
 
 export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => void }) {
   const first = refs[0];
@@ -117,7 +117,7 @@ export function WhyDrawer({ refs, onClose }: { refs: WhyRef[]; onClose: () => vo
                   />
                   <p className="text-sm font-semibold text-ink">{e.action}</p>
                   <p className="mt-0.5 text-xs text-faint">
-                    {new Date(e.at).toLocaleString("en-IN")} · {String(e.actor.kind ?? "system")}
+                    {formatIST(e.at)} · {String(e.actor.kind ?? "system")}
                     {e.actor.run_id ? ` · run ${String(e.actor.run_id).slice(0, 13)}…` : ""}
                   </p>
                   <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-line2 bg-card p-2.5 font-mono text-[11px] leading-relaxed text-mute">

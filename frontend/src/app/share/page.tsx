@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 
 import { DataRoomView } from "@/components/DataRoomView";
 import { Providers } from "@/app/providers";
-import { api } from "@/lib/api";
+import { api, formatISTDate } from "@/lib/api";
 
 function SharedRoom() {
   const token = useSearchParams().get("token") ?? "";
@@ -38,7 +38,7 @@ function SharedRoom() {
           </div>
           {room.data?.shared && (
             <span className="mono-label rounded-full border border-line bg-[var(--fill-2)] px-3 py-1.5 text-mute">
-              expires {new Date(room.data.shared.expires_at * 1000).toLocaleDateString("en-IN")}
+              expires {formatISTDate(room.data.shared.expires_at * 1000)}
             </span>
           )}
         </div>

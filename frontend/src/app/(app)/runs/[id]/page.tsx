@@ -11,7 +11,7 @@ import { useEffect } from "react";
 
 import { Card, PageShell, Pill, Skeleton, stagger } from "@/components/ui";
 import { useRunStream, type RunEvent } from "@/hooks/useRunStream";
-import { api, type RunStep } from "@/lib/api";
+import { api, formatIST, type RunStep } from "@/lib/api";
 
 const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 const TONE: Record<string, "good" | "warn" | "bad" | "neutral"> = {
@@ -121,7 +121,7 @@ export default function RunDetailPage() {
             )}
             {run.data.created_at && (
               <span className="mono-annot">
-                started {new Date(run.data.created_at).toLocaleString("en-IN")}
+                started {formatIST(run.data.created_at)}
               </span>
             )}
             <span className="mono-annot select-all">{runId}</span>

@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 
 import { Card, EmptyState, PageShell, Pill, Skeleton, stagger } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, formatIST } from "@/lib/api";
 
 const TONE: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   succeeded: "good",
@@ -77,7 +77,7 @@ export default function RunsPage() {
                     <Pill tone={TONE[r.status] ?? "neutral"}>{r.status}</Pill>
                   </td>
                   <td className="whitespace-nowrap px-5 py-3.5 font-mono text-xs text-dark-mute">
-                    {r.created_at ? new Date(r.created_at).toLocaleString("en-IN") : "—"}
+                    {r.created_at ? formatIST(r.created_at) : "—"}
                   </td>
                   <td className="whitespace-nowrap px-5 py-3.5">
                     <Link

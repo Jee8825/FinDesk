@@ -16,8 +16,16 @@ import {
   PrimaryBtn,
   Skeleton,
 } from "@/components/ui";
-import { ForecastTerrain } from "@/components/ForecastTerrain";
+import dynamic from "next/dynamic";
+
 import { useGraphRun } from "@/hooks/useGraphRun";
+
+// FE6: the terrain pulls in three/fiber/drei (~0.5 MB) — split it out of the
+// money page's first paint; the flat bands chart renders while it loads
+const ForecastTerrain = dynamic(
+  () => import("@/components/ForecastTerrain").then((m) => m.ForecastTerrain),
+  { ssr: false, loading: () => <Skeleton className="h-72" /> },
+);
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
