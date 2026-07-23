@@ -81,6 +81,20 @@ async def projector(state: ForecastState) -> dict:
     return {"result": result}
 
 
+async def critic_review(state: ForecastState) -> dict:
+    """Critic seat: invariant check between project and persist."""
+    from findesk_agents.graphs.cash_forecast import critic
+
+    step_id = uuid7()
+    await state.emitter.step("critic", "started", step_id)
+    problems = critic.review(state.result)
+    await state.emitter.step("critic", "finished", step_id, violations=len(problems))
+    if problems:
+        # fail the run loudly — a wrong forward view is worse than none
+        raise RuntimeError(f"forecast critic rejected projection: {'; '.join(problems[:3])}")
+    return {}
+
+
 async def persist(state: ForecastState) -> dict:
     step_id = uuid7()
     await state.emitter.step("persist", "started", step_id)
