@@ -197,7 +197,10 @@ function Sidebar() {
     },
     {
       label: "Payables",
-      items: [{ href: "/payables", label: "Payables Shield" }],
+      items: [
+        { href: "/payables", label: "Payables Shield" },
+        { href: "/ims", label: "IMS · ITC Shield" },
+      ],
     },
     {
       label: "Cash command",

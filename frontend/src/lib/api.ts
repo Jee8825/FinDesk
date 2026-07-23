@@ -384,6 +384,47 @@ export type DataRoom = {
   shared?: { read_only: boolean; expires_at: number };
 };
 
+export type ImsRecordItem = {
+  id: string;
+  supplier_gstin: string;
+  supplier_name: string;
+  doc_type: string;
+  doc_number: string;
+  doc_date: string;
+  period: string;
+  taxable_value_paise: number;
+  tax_paise: number;
+  total_paise: number;
+  state: string;
+  match_tier: string | null;
+  matched_bill_number: string | null;
+  recommendation: string | null;
+  note: string | null;
+};
+
+export type ImsQueueOut = {
+  records: ImsRecordItem[];
+  totals: {
+    pending_count: number;
+    itc_at_stake_paise: number;
+    review_count: number;
+    accept_ready_paise: number;
+    accepted_tax_paise: number;
+    rejected_tax_paise: number;
+  };
+  ca_note: string;
+};
+
+export type ImsSyncOut = {
+  period: string;
+  pulled: number;
+  created: number;
+  refreshed: number;
+  skipped_decided: number;
+  recommended_accept: number;
+  needs_review: number;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
@@ -410,6 +451,14 @@ export const api = {
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
   payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
   payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
+  imsQueue: () => request<ImsQueueOut>("GET", apiPaths.GET_IMS_QUEUE),
+  imsSync: () => request<ImsSyncOut>("POST", apiPaths.POST_IMS_SYNC),
+  imsAction: (recordId: string, targetState: "accepted" | "rejected") =>
+    request<{ ok: boolean; approval_id: string }>(
+      "POST",
+      apiPaths.POST_IMS_RECORDS_RECORD_ID_ACTION.replace("{record_id}", recordId),
+      { target_state: targetState },
+    ),
   auditVerify: () =>
     request<{
       valid: boolean;
