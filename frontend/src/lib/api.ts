@@ -463,6 +463,25 @@ export type ImsSyncOut = {
   needs_review: number;
 };
 
+export type CloseCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  severity: "block" | "warn";
+  value: string;
+  href: string;
+};
+
+export type CloseChecklistOut = {
+  period: string;
+  generated_at: string;
+  checks: CloseCheck[];
+  blockers: string[];
+  warnings: string[];
+  ready: boolean;
+  audit_head: string | null;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
@@ -516,6 +535,14 @@ export const api = {
       head_hash: string;
       broken_at?: { index: number; id: string; action: string };
     }>("GET", apiPaths.GET_AUDIT_VERIFY),
+  closeChecklist: () => request<CloseChecklistOut>("GET", apiPaths.GET_CLOSE_CHECKLIST),
+  closeSignoff: (rationale?: string) =>
+    request<{ ok: boolean; period: string; warnings: string[] }>(
+      "POST",
+      apiPaths.POST_CLOSE_SIGNOFF,
+      { rationale },
+    ),
+  closePackPath: () => `${API_PREFIX}${apiPaths.GET_CLOSE_PACK}`,
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",

@@ -12,6 +12,7 @@ from app.api.routes_agent import router as agent_router
 from app.api.routes_anomalies import router as anomalies_router
 from app.api.routes_approvals import router as approvals_router
 from app.api.routes_books import router as books_router
+from app.api.routes_close import router as close_router
 from app.api.routes_conflicts import router as conflicts_router
 from app.api.routes_dataroom import router as dataroom_router
 from app.api.routes_forecast import router as forecast_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(conflicts_router, prefix=prefix)
     app.include_router(anomalies_router, prefix=prefix)
     app.include_router(reports_router, prefix=prefix)
+    app.include_router(close_router, prefix=prefix)
     app.include_router(radar_router, prefix=prefix)
     app.include_router(payables_router, prefix=prefix)
     app.include_router(forecast_router, prefix=prefix)

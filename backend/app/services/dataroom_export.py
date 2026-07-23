@@ -110,6 +110,7 @@ def build_pack(
     receivables: list[dict[str, Any]],
     payables: list[dict[str, Any]],
     forecast_weeks: list[dict[str, Any]],
+    extra_files: dict[str, str] | None = None,
 ) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -117,4 +118,6 @@ def build_pack(
         zf.writestr("receivables_aging.csv", receivables_csv(receivables))
         zf.writestr("payables_compliance.csv", payables_csv(payables))
         zf.writestr("forecast_weeks.csv", forecast_csv(forecast_weeks))
+        for name, text in (extra_files or {}).items():
+            zf.writestr(name, text)  # e.g. close_checklist.md (routes_close)
     return buf.getvalue()

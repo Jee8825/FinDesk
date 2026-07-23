@@ -2,9 +2,10 @@
 // Reports + Why? — "Pack + drawer" (wireframe Reports A, signature surface
 // A8): the month-end pack where every figure answers "Why?" via the
 // provenance drawer.
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileDown, Info, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { WhyDrawer } from "@/components/WhyDrawer";
@@ -13,13 +14,110 @@ import {
   ErrorNote,
   MonoLabel,
   PageShell,
+  PrimaryBtn,
   Skeleton,
   StatCard,
   stagger,
 } from "@/components/ui";
-import { api, formatINR, type WhyRef } from "@/lib/api";
+import { api, authorizedFetch, formatINR, type WhyRef } from "@/lib/api";
 
 const PERIODS = ["2026-04", "2026-05", "2026-06", "2026-07"];
+
+function CloseCard() {
+  const queryClient = useQueryClient();
+  const checklist = useQuery({ queryKey: ["close-checklist"], queryFn: () => api.closeChecklist() });
+  const [rationale, setRationale] = useState("");
+  const [signedNote, setSignedNote] = useState<string | null>(null);
+  const signoff = useMutation({
+    mutationFn: () => api.closeSignoff(rationale.trim() || undefined),
+    onSuccess: (r) => {
+      setSignedNote(`Close ${r.period} signed off — recorded on the audit chain.`);
+      void queryClient.invalidateQueries({ queryKey: ["close-checklist"] });
+    },
+  });
+  const c = checklist.data;
+  if (checklist.isLoading) return <Skeleton className="mb-5 h-40" />;
+  if (!c) return null;
+  const needRationale = c.warnings.length > 0;
+
+  return (
+    <Card className="mb-5 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink">Month-end close — {c.period}</p>
+          <p className="mono-annot mt-0.5">
+            evidence-linked checklist · sign-off lands on the audit chain
+            {c.audit_head && ` · head ${c.audit_head.slice(0, 10)}…`}
+          </p>
+        </div>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[13px] font-bold text-ink transition-colors hover:bg-[var(--fill-2)]"
+          onClick={async () => {
+            const res = await authorizedFetch(api.closePackPath());
+            if (!res.ok) return;
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `findesk-close-${c.period}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          title="credit pack + close_checklist.md — deterministic, regenerate-and-diff"
+        >
+          <FileDown size={14} /> Close pack
+        </button>
+      </div>
+
+      <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+        {c.checks.map((chk) => (
+          <li key={chk.id} className="flex items-center gap-2 text-[13px]">
+            {chk.ok ? (
+              <CheckCircle2 size={14} className="shrink-0 text-moss" />
+            ) : chk.severity === "block" ? (
+              <XCircle size={14} className="shrink-0 text-rust" />
+            ) : (
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+            )}
+            <Link href={chk.href} className="text-ink hover:underline">
+              {chk.label}
+            </Link>
+            <span className="mono-annot ml-auto">{chk.value}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+        {signedNote ? (
+          <p className="text-[13px] font-bold text-moss">{signedNote}</p>
+        ) : c.ready ? (
+          <>
+            {needRationale && (
+              <input
+                value={rationale}
+                onChange={(e) => setRationale(e.target.value)}
+                placeholder={`rationale for: ${c.warnings.join(", ")}`}
+                aria-label="sign-off rationale for open warnings"
+                className="min-w-64 flex-1 rounded-lg border border-line bg-[var(--fill-2)] px-3 py-2 text-[13px] text-ink"
+              />
+            )}
+            <PrimaryBtn
+              onClick={() => signoff.mutate()}
+              disabled={signoff.isPending || (needRationale && !rationale.trim())}
+            >
+              {signoff.isPending ? "Signing…" : "Sign off close"}
+            </PrimaryBtn>
+          </>
+        ) : (
+          <p className="text-[13px] font-semibold text-rust">
+            Blocked: {c.blockers.join(", ")} — resolve before sign-off.
+          </p>
+        )}
+        {signoff.isError && <p className="mono-annot text-rust">{String(signoff.error)}</p>}
+      </div>
+    </Card>
+  );
+}
 
 function WhyButton({ refs, onOpen }: { refs: WhyRef[]; onOpen: (refs: WhyRef[]) => void }) {
   if (!refs.length) return null;
@@ -69,6 +167,8 @@ export default function ReportsPage() {
         ◇ signature surface a8 · every figure answers &quot;why?&quot; — provenance trail back to
         source transactions
       </p>
+
+      <CloseCard />
 
       {report.isLoading && (
         <div className="space-y-4">

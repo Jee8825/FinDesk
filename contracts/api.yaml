@@ -28,6 +28,7 @@ tags:
   - name: approvals
   - name: cash
   - name: ims
+  - name: close
   - name: why
   - name: webhooks
 
@@ -153,6 +154,13 @@ paths:
       tags: [cash]
       summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
       responses: { "200": { description: queued } }
+
+  /close/checklist:
+    get: { tags: [close], summary: "Month-end close checklist — evidence-linked composition over existing engines (recon, conflicts, anomalies, §15 clocks, MSME drift, IMS, forecast freshness, audit chain); blockers vs warnings", responses: { "200": { description: checklist } } }
+  /close/signoff:
+    post: { tags: [close], summary: "Maker-checker close sign-off — 409 while blocked; warnings require a rationale; the close record is an audit-chain entry (close.signoff)", responses: { "200": { description: signed } } }
+  /close/pack:
+    get: { tags: [close], summary: "Close pack zip = credit pack + close_checklist.md — deterministic, regenerate-and-diff", responses: { "200": { description: zip } } }
 
   /dataroom/export:
     get: { tags: [trust], summary: "Credit pack zip — summary.md (score + audit head hash) + receivables/payables/forecast CSVs, all deterministic", responses: { "200": { description: zip } } }
