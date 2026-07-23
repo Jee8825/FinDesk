@@ -32,6 +32,21 @@ from app.services.statutory import (
 # "medium" enterprises are outside 43B(h) (it covers micro & small only).
 MSE_STATUSES = {"micro", "small", "registered_mse"}
 
+
+def effective_mse(self_status: str, verified_category: str | None) -> tuple[bool, str, bool]:
+    """(in_scope, source, drift) — the Udyam-verified category, when present,
+    decides §15/43B(h) scope; the self-declared tag is only the fallback.
+
+    Drift = the verified register disagrees with the self-declared tag about
+    scope (e.g. a vendor tagged small verifies medium: it grew out of 43B(h)
+    between FYs). Pure — unit-tested without a DB.
+    """
+    if not verified_category:
+        return self_status in MSE_STATUSES, "self_declared", False
+    in_scope = verified_category in {"micro", "small"}
+    drift = (self_status in MSE_STATUSES) != in_scope
+    return in_scope, "verified", drift
+
 CA_NOTE = (
     "43B(h) exposure and §16 interest are computed as preparation only — "
     "confirm vendor Udyam status and figures with your CA before filing."
@@ -53,11 +68,29 @@ async def gather_items(session, tenant_id: str, now: datetime, *, bank_rate_bps:
     items: list[dict[str, Any]] = []
     rows: list[dict[str, Any]] = []
     amounts: list[int] = []
+    drift_alerts: list[dict[str, Any]] = []
+    drift_seen: set[str] = set()
     non_mse = 0
     for bill in bills:
         party = parties.get(bill.counterparty_id)
         status = (party.msme_status or "").lower() if party else ""
-        if status not in MSE_STATUSES:
+        verified = (party.msme_verified_category or None) if party else None
+        in_scope, source, drift = effective_mse(status, verified)
+        if drift and party and party.id not in drift_seen:
+            drift_seen.add(party.id)
+            drift_alerts.append(
+                {
+                    "vendor": party.name,
+                    "self_declared": status or "untagged",
+                    "verified": verified,
+                    "effect": (
+                        "now inside 43B(h) scope"
+                        if in_scope
+                        else "outside 43B(h) — verified beyond small"
+                    ),
+                }
+            )
+        if not in_scope:
             non_mse += 1  # outside §15/43B(h); counted so callers can say so
             continue
         row = compliance_row(
@@ -72,8 +105,11 @@ async def gather_items(session, tenant_id: str, now: datetime, *, bank_rate_bps:
             {
                 "bill_id": bill.id,
                 "bill_number": bill.number,
+                "counterparty_id": bill.counterparty_id,
                 "vendor": party.name if party else "unknown",
-                "msme_status": status,
+                "msme_status": verified if source == "verified" else status,
+                "msme_source": source,
+                "verified_category": verified,
                 "amount_paise": bill.amount_paise,
                 "outstanding_paise": bill.outstanding_paise,
                 "clock": row,
@@ -81,7 +117,7 @@ async def gather_items(session, tenant_id: str, now: datetime, *, bank_rate_bps:
         )
     # most urgent first: breached by overdue days, then closing windows
     items.sort(key=lambda i: (-i["clock"]["overdue_days"], i["clock"]["days_left"]))
-    return items, rows, amounts, non_mse
+    return items, rows, amounts, non_mse, drift_alerts
 
 
 def fy_end(now: datetime) -> datetime:

@@ -9,7 +9,7 @@ from typing import Any
 import anyio
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from findesk_shared import late_phrase, uuid7, vendor_scope
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth.deps import Auth
 from app.config import get_settings
@@ -397,3 +397,72 @@ async def import_from_tally(auth: Auth) -> TallySyncOut:
     return TallySyncOut(mode=mode, period=f"{from_date}..{to_date}", **{
         k: v for k, v in summary.items() if k != "fetched_at"
     })
+
+
+class VerifyMsmeBody(BaseModel):
+    urn: str = Field(min_length=16, max_length=25, description="UDYAM-XX-00-0000000")
+
+
+@router.post("/books/counterparties/{party_id}/verify-msme")
+async def verify_msme(party_id: str, body: VerifyMsmeBody, auth: Auth) -> dict[str, Any]:
+    """F4: verify a vendor's Udyam registration against the register (fixture
+    provider today; IDfy/AuthBridge-class adapter later, same surface).
+
+    The verified category — never the self-declared tag — then scopes the
+    §15/43B(h) engine (services/payables.effective_mse). The human tag is
+    kept alongside; disagreement surfaces as a drift alert, not a silent
+    overwrite (lap-2 rule: evidence beats assertion, visibly).
+    """
+    if auth.role == "viewer":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "viewers cannot verify vendors")
+    import asyncio
+    from datetime import UTC, datetime
+
+    from findesk_tools.udyam import SandboxUdyamProvider
+    from sqlalchemy import select
+
+    from app.db.models import Counterparty
+    from app.services.payables import effective_mse
+
+    verification = await asyncio.to_thread(SandboxUdyamProvider().verify, urn=body.urn)
+    if not verification.found:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "URN not found in the Udyam register (sandbox) — check the number",
+        )
+    async with session_scope() as session:
+        party = await session.scalar(
+            select(Counterparty).where(
+                Counterparty.id == party_id, Counterparty.tenant_id == auth.tenant_id
+            )
+        )
+        if party is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "counterparty not found")
+        party.msme_verified_category = verification.category
+        party.msme_verified_urn = verification.urn
+        party.msme_verified_at = datetime.now(UTC)
+        in_scope, _source, drift = effective_mse(
+            (party.msme_status or "").lower(), verification.category
+        )
+        await write_audit(
+            session,
+            tenant_id=auth.tenant_id,
+            actor={"kind": "user", "id": auth.user_id},
+            action="msme.verified",
+            entity_ref=f"counterparty:{party.id}",
+            payload={
+                "vendor": party.name,
+                "urn": verification.urn,
+                "verified_category": verification.category,
+                "self_declared": party.msme_status,
+                "in_43bh_scope": in_scope,
+                "drift": drift,
+                "register_as_of": verification.as_of,
+            },
+        )
+        return {
+            "ok": True,
+            "verified_category": verification.category,
+            "in_43bh_scope": in_scope,
+            "drift": drift,
+        }

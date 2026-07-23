@@ -2,8 +2,10 @@
 // Payables Shield — buyer-side §15 clock + 43B(h) tax exposure per MSE bill.
 // The radar's mirror: same statutory engine, opposite direction. Suppliers may
 // hesitate to enforce; buyers have a hard legal reason to comply.
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 
 import {
   Bar,
@@ -25,6 +27,16 @@ const BAND: Record<string, { label: string; tone: "neutral" | "warn" | "bad" | "
 };
 
 function BillRow({ item }: { item: PayableItem }) {
+  const queryClient = useQueryClient();
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [urn, setUrn] = useState("");
+  const verify = useMutation({
+    mutationFn: () => api.verifyMsme(item.counterparty_id, urn.trim()),
+    onSuccess: () => {
+      setVerifyOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["payables"] });
+    },
+  });
   const c = item.clock;
   const breached = c.band === "breached";
   const consumed = breached ? 45 + c.overdue_days : c.day_count;
@@ -38,9 +50,51 @@ function BillRow({ item }: { item: PayableItem }) {
     >
       <td className="px-5 py-4">
         <p className="text-sm font-bold text-dark-text">{item.vendor}</p>
-        <p className="mt-0.5 font-mono text-xs text-dark-mute">
-          {item.bill_number} · {item.msme_status} enterprise
+        <p className="mt-0.5 flex items-center gap-1.5 font-mono text-xs text-dark-mute">
+          {item.bill_number} ·{" "}
+          {item.msme_source === "verified" ? (
+            <span className="inline-flex items-center gap-1 text-mint">
+              <ShieldCheck size={12} /> {item.verified_category} · Udyam-verified
+            </span>
+          ) : (
+            <span>{item.msme_status} · self-declared</span>
+          )}
         </p>
+        {item.msme_source !== "verified" && (
+          <div className="mt-1">
+            {verifyOpen ? (
+              <span className="inline-flex items-center gap-1.5">
+                <input
+                  value={urn}
+                  onChange={(e) => setUrn(e.target.value)}
+                  placeholder="UDYAM-XX-00-0000000"
+                  aria-label={`Udyam URN for ${item.vendor}`}
+                  className="w-44 rounded border border-dark-line bg-dark-card2 px-1.5 py-0.5 font-mono text-[11px] text-dark-text placeholder:text-dark-mute/60"
+                />
+                <button
+                  onClick={() => urn.trim() && verify.mutate()}
+                  disabled={urn.trim().length < 16 || verify.isPending}
+                  className="mono-label text-mint disabled:opacity-40"
+                >
+                  {verify.isPending ? "…" : "verify"}
+                </button>
+                <button onClick={() => setVerifyOpen(false)} className="mono-label text-dark-mute">
+                  ×
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setVerifyOpen(true)}
+                className="mono-annot text-dark-mute transition-colors hover:text-accent-soft"
+              >
+                + verify Udyam URN
+              </button>
+            )}
+            {verify.isError && (
+              <p className="mono-annot mt-0.5 text-blush">{String(verify.error)}</p>
+            )}
+          </div>
+        )}
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-right font-mono font-semibold text-dark-text">
         {formatINRCompact(item.outstanding_paise)}
@@ -185,6 +239,25 @@ export default function PayablesPage() {
               sub="never deductible — pure cost"
             />
           </motion.div>
+
+          {p.drift_alerts.length > 0 && (
+            <Card className="mt-5 border-amber/40 px-5 py-4">
+              <p className="flex items-center gap-2 text-sm font-bold text-dark-text">
+                <ShieldAlert size={15} className="text-amber" /> Udyam status drift — scope
+                changed
+              </p>
+              <ul className="mt-2 space-y-1">
+                {p.drift_alerts.map((d) => (
+                  <li key={d.vendor} className="text-xs text-dark-mute">
+                    <span className="font-bold text-dark-text">{d.vendor}</span> — tagged{" "}
+                    <span className="font-mono">{d.self_declared}</span>, register says{" "}
+                    <span className="font-mono">{d.verified}</span> → {d.effect}. Update your
+                    vendor master with your CA.
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           <DefensePlan />
 

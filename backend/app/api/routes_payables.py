@@ -25,8 +25,11 @@ router = APIRouter(tags=["cash"])
 class PayableItem(BaseModel):
     bill_id: str
     bill_number: str
+    counterparty_id: str
     vendor: str
     msme_status: str
+    msme_source: str = "self_declared"  # verified | self_declared (F4)
+    verified_category: str | None = None
     amount_paise: int  # original bill amount
     outstanding_paise: int  # unpaid portion — the clock runs on this
     clock: dict[str, Any]
@@ -36,6 +39,9 @@ class PayablesOut(BaseModel):
     items: list[PayableItem]
     totals: dict[str, int]
     non_mse_open_count: int
+    # F4: vendors whose Udyam-verified category disagrees with the tag —
+    # scope changes the human must see (e.g. small → medium = out of 43B(h))
+    drift_alerts: list[dict[str, Any]] = []
     ca_note: str
 
 
@@ -50,13 +56,14 @@ class PlanOut(BaseModel):
 async def payables_compliance(auth: Auth) -> PayablesOut:
     now = datetime.now(UTC)
     async with session_scope() as session:
-        items, rows, amounts, non_mse = await gather_items(
+        items, rows, amounts, non_mse, drift = await gather_items(
             session, auth.tenant_id, now, bank_rate_bps=get_settings().statutory_bank_rate_bps
         )
     return PayablesOut(
         items=[PayableItem(**i) for i in items],
         totals=totals(rows, amounts),
         non_mse_open_count=non_mse,
+        drift_alerts=drift,
         ca_note=CA_NOTE,
     )
 
@@ -66,7 +73,7 @@ async def payables_plan(auth: Auth) -> PlanOut:
     """Deduction Defense — ranked pay-first plan over breached/closing bills."""
     now = datetime.now(UTC)
     async with session_scope() as session:
-        items, _rows, _amounts, _ = await gather_items(
+        items, _rows, _amounts, _non_mse, _drift = await gather_items(
             session, auth.tenant_id, now, bank_rate_bps=get_settings().statutory_bank_rate_bps
         )
         latest = await session.scalar(

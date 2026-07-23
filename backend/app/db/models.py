@@ -92,6 +92,14 @@ class Counterparty(TimestampedTenanted, Base):
     name: Mapped[str] = mapped_column(String(200))
     gstin: Mapped[str | None] = mapped_column(String(15), nullable=True)
     msme_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Udyam-register verification (F4): the verified category — when present —
+    # beats the self-declared tag for §15/43B(h) scoping; the human tag is
+    # never overwritten, both are shown
+    msme_verified_category: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    msme_verified_urn: Mapped[str | None] = mapped_column(String(25), nullable=True)
+    msme_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     contacts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 

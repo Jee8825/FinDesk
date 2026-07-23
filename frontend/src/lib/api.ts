@@ -290,8 +290,11 @@ export type RadarOut = {
 export type PayableItem = {
   bill_id: string;
   bill_number: string;
+  counterparty_id: string;
   vendor: string;
   msme_status: string;
+  msme_source: "verified" | "self_declared";
+  verified_category: string | null;
   amount_paise: number;
   outstanding_paise: number;
   clock: {
@@ -309,6 +312,12 @@ export type PayableItem = {
 
 export type PayablesOut = {
   items: PayableItem[];
+  drift_alerts: {
+    vendor: string;
+    self_declared: string;
+    verified: string | null;
+    effect: string;
+  }[];
   totals: {
     open_mse_paise: number;
     breached_paise: number;
@@ -485,6 +494,12 @@ export const api = {
       { promised_date: promisedDate, amount_paise: amountPaise },
     ),
   payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
+  verifyMsme: (partyId: string, urn: string) =>
+    request<{ ok: boolean; verified_category: string; in_43bh_scope: boolean; drift: boolean }>(
+      "POST",
+      apiPaths.POST_BOOKS_COUNTERPARTIES_PARTY_ID_VERIFY_MSME.replace("{party_id}", partyId),
+      { urn },
+    ),
   payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
   imsQueue: () => request<ImsQueueOut>("GET", apiPaths.GET_IMS_QUEUE),
   imsSync: () => request<ImsSyncOut>("POST", apiPaths.POST_IMS_SYNC),

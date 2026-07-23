@@ -127,6 +127,9 @@ paths:
     post: { tags: [cash], summary: "Log a client's promise-to-pay; settlement classifies kept/broken deterministically when recon marks the invoice paid (F3 outcome loop)", responses: { "201": { description: created } } }
   /receivables/radar:
     get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
+  /books/counterparties/{party_id}/verify-msme:
+    parameters: [{ name: party_id, in: path, required: true, schema: { type: string } }]
+    post: { tags: [books], summary: "Verify a vendor's Udyam URN (fixture register today) — verified category then scopes §15/43B(h); tag kept alongside, disagreement = drift alert", responses: { "200": { description: verification } } }
   /payables/compliance:
     get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, 43B(h) disallowance exposure per open bill", responses: { "200": { description: compliance } } }
   /payables/plan:

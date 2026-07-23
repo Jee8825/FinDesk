@@ -53,6 +53,15 @@ calls in CI. `list_invoices` reads Bills Receivable (Sundry Debtors),
 ## einvoice@v1
 - `fetch_by_irn(irn) → { invoice: EInvoiceDoc }`
 
+## udyam@v1
+- `verify(urn) → UdyamVerification { urn, found, enterprise_name?, category
+  micro|small|medium?, major_activity?, as_of? }` — read-only register
+  lookup, no approval token (verification acts on nothing). The verified
+  category scopes §15/43B(h) (services/payables.effective_mse); the
+  self-declared tag is kept alongside and disagreement surfaces as a drift
+  alert. Sandbox: fixture register; live = IDfy/AuthBridge-class adapter,
+  same surface.
+
 ## email@v1
 - `draft(to[], subject, body_md, thread_ref?) → { draft_id }`
 - `send(draft_id)` ⚠ — requires approval_token

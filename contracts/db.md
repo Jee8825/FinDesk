@@ -40,6 +40,9 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
   state `pending|accepted|rejected` (decided is terminal for sync; flips only
   inside decide_approval), match_tier?, matched_bill_number?,
   recommendation `accept|review`?, note?
+- **counterparties** (`0016` adds): msme_verified_category?, msme_verified_urn?,
+  msme_verified_at? — Udyam-register verification; verified beats
+  self-declared for 43B(h) scope, human tag never overwritten
 - **payment_promises** (`0015`): invoice_id, promised_date, amount_paise?,
   status `open|kept|broken` (settled deterministically on recon commit —
   paid ≤ promised = kept; lateness + outcome written back to Recall via the

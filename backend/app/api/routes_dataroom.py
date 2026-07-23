@@ -113,7 +113,7 @@ async def dataroom_export(auth: Auth):
             }
             for inv, _clock, snap in clock_rows
         ]
-        payable_items, _r, _a, _n = await gather_items(
+        payable_items, _r, _a, _n, _d = await gather_items(
             session, auth.tenant_id, now, bank_rate_bps=_gs().statutory_bank_rate_bps
         )
         latest = await session.scalar(
