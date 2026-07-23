@@ -276,6 +276,9 @@ export type RadarItem = {
   predicted_payment_date: string | null;
   avg_days_late: number | null;
   behavior_observations: number;
+  open_promise_date: string | null;
+  promises_kept: number;
+  promises_broken: number;
 };
 
 export type RadarOut = {
@@ -475,6 +478,12 @@ export const api = {
     extra_monthly_outflow_paise?: number;
   }) => request<WhatifOut>("POST", apiPaths.POST_FORECAST_WHATIF, params),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
+  logPromise: (invoiceId: string, promisedDate: string, amountPaise?: number) =>
+    request<{ ok: boolean; promise_id: string }>(
+      "POST",
+      apiPaths.POST_RECEIVABLES_INVOICE_ID_PROMISE.replace("{invoice_id}", invoiceId),
+      { promised_date: promisedDate, amount_paise: amountPaise },
+    ),
   payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
   payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
   imsQueue: () => request<ImsQueueOut>("GET", apiPaths.GET_IMS_QUEUE),

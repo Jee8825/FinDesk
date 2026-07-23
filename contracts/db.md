@@ -40,6 +40,10 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
   state `pending|accepted|rejected` (decided is terminal for sync; flips only
   inside decide_approval), match_tier?, matched_bill_number?,
   recommendation `accept|review`?, note?
+- **payment_promises** (`0015`): invoice_id, promised_date, amount_paise?,
+  status `open|kept|broken` (settled deterministically on recon commit —
+  paid ≤ promised = kept; lateness + outcome written back to Recall via the
+  shared `late_phrase` twin), source `manual|email_reply`, note?
 - **expenses**: counterparty_id?, date, amount_paise, category_code?, document_id?
 - **matches**: bank_transaction_id, target (invoice|bill|expense + id), kind
   `full|partial|fee|tds_adjusted`, confidence numeric, matched_by `agent|human`,

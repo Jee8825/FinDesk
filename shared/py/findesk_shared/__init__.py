@@ -5,13 +5,14 @@ never hand-edit those.
 """
 
 from findesk_shared.ids import uuid7
-from findesk_shared.memory_keys import parse_late_days, vendor_scope, vendor_slug
+from findesk_shared.memory_keys import late_phrase, parse_late_days, vendor_scope, vendor_slug
 from findesk_shared.money import format_inr, paise_to_rupees
 
 __all__ = [
     "uuid7",
     "format_inr",
     "paise_to_rupees",
+    "late_phrase",
     "parse_late_days",
     "vendor_scope",
     "vendor_slug",

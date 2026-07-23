@@ -122,6 +122,9 @@ paths:
       tags: [cash]
       summary: Deterministic what-if on the stored base scenario (collection delay, inflow haircut, extra outflow) — server computes, UI only renders
       responses: { "200": { description: adjusted weeks + gap } }
+  /receivables/{invoice_id}/promise:
+    parameters: [{ name: invoice_id, in: path, required: true, schema: { type: string } }]
+    post: { tags: [cash], summary: "Log a client's promise-to-pay; settlement classifies kept/broken deterministically when recon marks the invoice paid (F3 outcome loop)", responses: { "201": { description: created } } }
   /receivables/radar:
     get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
   /payables/compliance:

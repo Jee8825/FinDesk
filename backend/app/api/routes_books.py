@@ -8,7 +8,7 @@ from typing import Any
 
 import anyio
 from fastapi import APIRouter, HTTPException, UploadFile, status
-from findesk_shared import uuid7, vendor_scope
+from findesk_shared import late_phrase, uuid7, vendor_scope
 from pydantic import BaseModel
 
 from app.auth.deps import Auth
@@ -208,7 +208,7 @@ async def onboard_invoices(file: UploadFile, auth: Auth) -> OnboardingOut:
             created += 1
             if inv.status == "paid" and inv.paid_date is not None:
                 delta = (inv.paid_date.date() - inv.due_date.date()).days
-                timing = f"{delta} days late" if delta > 0 else f"{-delta} days early"
+                timing = late_phrase(delta)  # shared write-twin of parse_late_days
                 observations.append(
                     (
                         f"client:{party.id}",

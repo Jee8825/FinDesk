@@ -142,6 +142,24 @@ async def commit_proposal(
             "approval_id": approval_id,
         },
     )
+    # F3 outcome loop: the settlement is the observation — write the client's
+    # observed lateness (shared late_phrase twin) + settle any open PTP.
+    txn = await repo.transaction(txn_id, tenant_id)
+    if txn is not None:
+        from app.services.promises import record_settlement
+
+        await record_settlement(
+            session,
+            tenant_id=tenant_id,
+            invoice=invoice,
+            paid_on=txn.value_date.date(),
+            actor=(
+                {"kind": "human_approval", "approval_id": approval_id, "run_id": run_id}
+                if matched_by == "human"
+                else {"kind": "agent", "run_id": run_id}
+            ),
+        )
+
     return {"committed": True, "reason": "ok", "match_id": match.id}
 
 

@@ -1,9 +1,12 @@
 "use client";
 // 45-Day Radar — "Clock table" (wireframe Radar A, dark signature surface):
 // statutory MSME clock per invoice, accrued interest, escalation rung.
-import { useQuery } from "@tanstack/react-query";
+// F3: promise-to-pay capture per row; settlement classifies kept/broken
+// on recon commit and feeds the same memory the forecast recalls.
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useState } from "react";
 
 import {
   Bar,
@@ -27,6 +30,16 @@ const RUNG: Record<string, { label: string; tone: "neutral" | "warn" | "bad" | "
 };
 
 function ClockRow({ item }: { item: RadarItem }) {
+  const queryClient = useQueryClient();
+  const [ptpOpen, setPtpOpen] = useState(false);
+  const [ptpDate, setPtpDate] = useState("");
+  const logPtp = useMutation({
+    mutationFn: () => api.logPromise(item.invoice_id, ptpDate),
+    onSuccess: () => {
+      setPtpOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["radar"] });
+    },
+  });
   const overdue = item.clock.overdue_days > 0;
   // days consumed of the 45-day statutory window (overdue_days counts past it)
   const consumed = overdue ? 45 + item.clock.overdue_days : 45 - daysLeft(item);
@@ -56,6 +69,9 @@ function ClockRow({ item }: { item: RadarItem }) {
             : `${daysLeft(item)} days to statutory limit`}
           {item.predicted_payment_date &&
             ` · likely pays ~${item.predicted_payment_date}${item.avg_days_late != null ? ` (runs ${item.avg_days_late}d late)` : ""}`}
+          {item.open_promise_date && ` · PTP ${item.open_promise_date}`}
+          {item.promises_kept + item.promises_broken > 0 &&
+            ` · promises ${item.promises_kept}✓/${item.promises_broken}✗`}
         </p>
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-right font-mono text-sm font-semibold text-dark-text">
@@ -73,6 +89,38 @@ function ClockRow({ item }: { item: RadarItem }) {
         >
           {overdue ? "Review options →" : "Chase →"}
         </Link>
+        {!item.open_promise_date && (
+          <div className="mt-1.5">
+            {ptpOpen ? (
+              <span className="inline-flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={ptpDate}
+                  onChange={(e) => setPtpDate(e.target.value)}
+                  aria-label={`promised payment date for ${item.invoice_number}`}
+                  className="rounded border border-dark-line bg-dark-card2 px-1.5 py-0.5 font-mono text-[11px] text-dark-text"
+                />
+                <button
+                  onClick={() => ptpDate && logPtp.mutate()}
+                  disabled={!ptpDate || logPtp.isPending}
+                  className="mono-label text-mint disabled:opacity-40"
+                >
+                  save
+                </button>
+                <button onClick={() => setPtpOpen(false)} className="mono-label text-dark-mute">
+                  ×
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setPtpOpen(true)}
+                className="mono-annot text-dark-mute transition-colors hover:text-accent-soft"
+              >
+                + log PTP
+              </button>
+            )}
+          </div>
+        )}
       </td>
     </motion.tr>
   );

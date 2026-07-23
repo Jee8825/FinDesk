@@ -172,6 +172,26 @@ class Bill(TimestampedTenanted, Base):
     )
 
 
+class PaymentPromise(TimestampedTenanted, Base):
+    """A client's promise-to-pay on one receivable (F3 outcome loop).
+
+    Settlement classifies it kept/broken deterministically when recon marks
+    the invoice paid; both the lateness and the promise outcome are written
+    back to Recall so the forecast's recalled behavior stays live, not
+    seed-only.
+    """
+
+    __tablename__ = "payment_promises"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), index=True)
+    promised_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_paise: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|kept|broken
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
 class ImsRecord(TimestampedTenanted, Base):
     """A supplier-filed document in the tenant's GST IMS queue (F1).
 
