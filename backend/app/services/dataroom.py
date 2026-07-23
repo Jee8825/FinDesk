@@ -13,8 +13,6 @@ Two deterministic artifacts a lender can underwrite against:
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,13 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     Anomaly,
-    AuditLog,
     BankTransaction,
     Conflict,
     Forecast,
     Invoice,
     Match,
 )
+from app.services.audit import verify_chain
 
 WEIGHTS = {
     "reconciliation": 25,
@@ -41,29 +39,22 @@ WEIGHTS = {
 }
 
 
-def _canonical(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
 async def verify_audit_chain(session: AsyncSession, tenant_id: str) -> dict[str, Any]:
-    rows = list(
-        await session.scalars(
-            select(AuditLog)
-            .where(AuditLog.tenant_id == tenant_id)
-            .order_by(AuditLog.created_at, AuditLog.id)
-        )
-    )
-    prev = "genesis"
-    for index, row in enumerate(rows):
-        body = _canonical(
-            {"actor": row.actor, "action": row.action, "entity_ref": row.entity_ref, **row.payload}
-        )
-        expected = hashlib.sha256(f"{prev}|{body}".encode()).hexdigest()
-        if row.prev_hash != prev or row.row_hash != expected:
-            return {"ok": False, "rows": len(rows), "first_break_index": index,
-                    "first_break_id": row.id}
-        prev = row.row_hash
-    return {"ok": True, "rows": len(rows), "first_break_index": None, "first_break_id": None}
+    """Adapter over the canonical walker in services/audit.py.
+
+    One recomputation algorithm in the codebase (lap-3 dedup — two copies had
+    already drifted in shape); this keeps the data room's published key names
+    stable for consumers.
+    """
+    raw = await verify_chain(session, tenant_id)
+    broken = raw.get("broken_at") or {}
+    return {
+        "ok": raw["valid"],
+        "rows": raw["entries"],
+        "head_hash": raw["head_hash"],
+        "first_break_index": broken.get("index"),
+        "first_break_id": broken.get("id"),
+    }
 
 
 def compute_score(components: dict[str, float]) -> dict[str, Any]:

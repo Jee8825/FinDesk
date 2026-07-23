@@ -38,6 +38,52 @@ CA_NOTE = (
 )
 
 
+async def gather_items(session, tenant_id: str, now: datetime, *, bank_rate_bps: int):
+    """MSE bills with computed clocks — shared by the routes and the export.
+
+    Returns (items, rows, amounts, non_mse_count); items are plain dicts so
+    callers shape their own response models.
+    """
+    from app.db.books_repo import BooksRepo
+
+    repo = BooksRepo(session)
+    parties = {c.id: c for c in await repo.counterparties(tenant_id)}
+    bills = await repo.open_bills(tenant_id)
+
+    items: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
+    amounts: list[int] = []
+    non_mse = 0
+    for bill in bills:
+        party = parties.get(bill.counterparty_id)
+        status = (party.msme_status or "").lower() if party else ""
+        if status not in MSE_STATUSES:
+            non_mse += 1  # outside §15/43B(h); counted so callers can say so
+            continue
+        row = compliance_row(
+            amount_paise=bill.outstanding_paise,  # §16/43B(h) run on the unpaid portion
+            acceptance_date=bill.acceptance_date or bill.issue_date,
+            now=now,
+            bank_rate_bps=bank_rate_bps,
+        )
+        rows.append(row)
+        amounts.append(bill.outstanding_paise)
+        items.append(
+            {
+                "bill_id": bill.id,
+                "bill_number": bill.number,
+                "vendor": party.name if party else "unknown",
+                "msme_status": status,
+                "amount_paise": bill.amount_paise,
+                "outstanding_paise": bill.outstanding_paise,
+                "clock": row,
+            }
+        )
+    # most urgent first: breached by overdue days, then closing windows
+    items.sort(key=lambda i: (-i["clock"]["overdue_days"], i["clock"]["days_left"]))
+    return items, rows, amounts, non_mse
+
+
 def fy_end(now: datetime) -> datetime:
     """The Indian financial-year end (31 March, IST) this instant falls in.
 

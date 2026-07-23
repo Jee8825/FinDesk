@@ -7,8 +7,9 @@ import { Link2 } from "lucide-react";
 import { useState } from "react";
 
 import { DataRoomView } from "@/components/DataRoomView";
-import { Card, ErrorNote, MonoLabel, PageShell, PrimaryBtn, Skeleton } from "@/components/ui";
-import { api } from "@/lib/api";
+import { Card, ErrorNote, GhostBtn, MonoLabel, PageShell, PrimaryBtn, Skeleton } from "@/components/ui";
+import { api, authorizedFetch } from "@/lib/api";
+import { API_PREFIX, apiPaths } from "@/lib/generated/api-paths";
 
 function AuditChip() {
   const audit = useQuery({ queryKey: ["audit-verify"], queryFn: () => api.auditVerify() });
@@ -76,9 +77,30 @@ export default function DataRoomPage() {
                 <Link2 size={11} /> expires 7d · view-only · the signed token is the credential
               </p>
             </div>
-            <PrimaryBtn onClick={() => share.mutate()} disabled={share.isPending}>
-              {copied ? "Link copied ✓" : share.isPending ? "Minting…" : "Generate link"}
-            </PrimaryBtn>
+            <div className="flex items-center gap-2">
+              <GhostBtn
+                onClick={async () => {
+                  const res = await authorizedFetch(
+                    `${API_PREFIX}${apiPaths.GET_DATAROOM_EXPORT}`,
+                    { method: "GET" },
+                  );
+                  if (!res.ok) return;
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `findesk-credit-pack-${new Date().toISOString().slice(0, 10)}.zip`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                title="summary.md + receivables/payables/forecast CSVs — deterministic, audit head hash inside"
+              >
+                Download credit pack
+              </GhostBtn>
+              <PrimaryBtn onClick={() => share.mutate()} disabled={share.isPending}>
+                {copied ? "Link copied ✓" : share.isPending ? "Minting…" : "Generate link"}
+              </PrimaryBtn>
+            </div>
             {shareUrl && (
               <div className="w-full">
                 <MonoLabel>share url</MonoLabel>

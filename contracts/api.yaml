@@ -136,6 +136,8 @@ paths:
       summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
       responses: { "200": { description: queued } }
 
+  /dataroom/export:
+    get: { tags: [trust], summary: "Credit pack zip — summary.md (score + audit head hash) + receivables/payables/forecast CSVs, all deterministic", responses: { "200": { description: zip } } }
   /audit/verify:
     get: { tags: [trust], summary: "Recompute the tenant's hash-chained audit log live — {valid, entries, head_hash, broken_at?}", responses: { "200": { description: verification } } }
   /dataroom:
