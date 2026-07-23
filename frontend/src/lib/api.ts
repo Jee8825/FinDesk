@@ -12,12 +12,23 @@ export type TokenPair = {
   role: string;
 };
 
+export type RunStep = {
+  step_id: string;
+  name: string;
+  status: string;
+  detail?: Record<string, unknown>;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+};
+
 export type RunOut = {
   run_id: string;
   graph: string;
   status: string;
   params: Record<string, unknown>;
-  steps?: { step_id: string; name: string; status: string }[];
+  created_at?: string | null;
+  steps?: RunStep[];
 };
 
 export function getToken(): string | null {

@@ -47,6 +47,9 @@ class StepOut(BaseModel):
     name: str
     status: str
     detail: dict[str, Any]
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
 
 
 class RunOut(BaseModel):
@@ -54,7 +57,25 @@ class RunOut(BaseModel):
     graph: str
     status: str
     params: dict[str, Any]
+    created_at: str | None = None
     steps: list[StepOut] = []
+
+
+def _step_out(s: Any) -> StepOut:
+    """Timing from the row lifecycle: created at 'started', updated on finish."""
+    done = s.status in {"finished", "failed"}
+    duration_ms = (
+        int((s.updated_at - s.created_at).total_seconds() * 1000) if done else None
+    )
+    return StepOut(
+        step_id=s.step_id,
+        name=s.name,
+        status=s.status,
+        detail=s.detail,
+        started_at=s.created_at.isoformat(),
+        finished_at=s.updated_at.isoformat() if done else None,
+        duration_ms=duration_ms,
+    )
 
 
 @router.get("/agent/health")
@@ -95,7 +116,14 @@ async def list_runs(auth: Auth) -> list[RunOut]:
     async with session_scope() as session:
         runs = await RunRepo(session).list_for_tenant(auth.tenant_id)
         return [
-            RunOut(run_id=r.id, graph=r.graph, status=r.status, params=r.params) for r in runs
+            RunOut(
+                run_id=r.id,
+                graph=r.graph,
+                status=r.status,
+                params=r.params,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in runs
         ]
 
 
@@ -112,10 +140,8 @@ async def get_run(run_id: str, auth: Auth) -> RunOut:
             graph=run.graph,
             status=run.status,
             params=run.params,
-            steps=[
-                StepOut(step_id=s.step_id, name=s.name, status=s.status, detail=s.detail)
-                for s in steps
-            ],
+            created_at=run.created_at.isoformat(),
+            steps=[_step_out(s) for s in steps],
         )
 
 

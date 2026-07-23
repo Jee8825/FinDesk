@@ -206,7 +206,7 @@ export default function Dashboard() {
               <li className="text-sm text-faint">No runs yet — import a statement to wake the agent.</li>
             )}
           </motion.ul>
-          <Link href="/reconciliation" className="mt-4 inline-flex items-center gap-1 text-[13px] font-bold text-accent">
+          <Link href="/runs" className="mt-4 inline-flex items-center gap-1 text-[13px] font-bold text-accent">
             View all runs <ArrowRight size={13} />
           </Link>
         </Card>

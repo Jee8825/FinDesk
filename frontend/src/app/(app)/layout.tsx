@@ -213,6 +213,7 @@ function Sidebar() {
       label: "Trust layer",
       items: [
         { href: "/reports", label: "Reports + Why?" },
+        { href: "/runs", label: "Run Viewer" },
         { href: "/dataroom", label: "Data Room" },
       ],
     },

@@ -31,6 +31,7 @@ const PAGES: Array<{ href: string; label: string; hint: string }> = [
   { href: "/receivables", label: "45-Day Radar", hint: "MSME clocks, interest" },
   { href: "/payables", label: "Payables Shield", hint: "43B(h) exposure, §15 clock" },
   { href: "/ims", label: "IMS · ITC Shield", hint: "accept/reject supplier filings, ITC at stake" },
+  { href: "/runs", label: "Run Viewer", hint: "glass box — every step, duration, verdict" },
   { href: "/collections", label: "Collections", hint: "chase drafts" },
   { href: "/forecast", label: "Forecast", hint: "13-week scenarios" },
   { href: "/actions", label: "WC Actions", hint: "working-capital options" },
