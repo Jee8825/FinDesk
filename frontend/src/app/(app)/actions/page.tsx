@@ -18,6 +18,7 @@ import {
   Skeleton,
   stagger,
 } from "@/components/ui";
+import { useGraphRun } from "@/hooks/useGraphRun";
 import { api, formatINR, formatINRCompact, type WcAction } from "@/lib/api";
 
 function HeroAction({ action }: { action: WcAction }) {
@@ -152,21 +153,11 @@ function CompactAction({ action, deltaVsTop }: { action: WcAction; deltaVsTop: n
 
 export default function ActionsPage() {
   const queryClient = useQueryClient();
-  const [running, setRunning] = useState(false);
   const actions = useQuery({ queryKey: ["wc-actions"], queryFn: () => api.wcActions() });
-
-  async function recompute() {
-    setRunning(true);
-    try {
-      await api.startRunByGraph("working_capital");
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["wc-actions"] });
-        setRunning(false);
-      }, 6000);
-    } catch {
-      setRunning(false);
-    }
-  }
+  // FE1: invalidate when the run actually finishes, not after a 6s guess
+  const recomputeRun = useGraphRun("working_capital", [["wc-actions"]]);
+  const running = recomputeRun.running;
+  const recompute = () => void recomputeRun.start();
 
   const list = [...(actions.data ?? [])].sort((a, b) => a.rank - b.rank);
   const [top, ...rest] = list;

@@ -18,6 +18,7 @@ import {
   PrimaryBtn,
   Skeleton,
 } from "@/components/ui";
+import { useGraphRun } from "@/hooks/useGraphRun";
 import { api, formatINR, type Approval } from "@/lib/api";
 
 function DraftPreview({ draft }: { draft: Approval }) {
@@ -79,24 +80,15 @@ function DraftPreview({ draft }: { draft: Approval }) {
 export default function CollectionsPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drafting, setDrafting] = useState(false);
   const approvals = useQuery({ queryKey: ["approvals"], queryFn: () => api.approvals() });
 
   const drafts = (approvals.data ?? []).filter((a) => a.action_kind === "send_email");
   const selected = drafts.find((d) => d.id === selectedId) ?? drafts[0];
 
-  async function draftChasers() {
-    setDrafting(true);
-    try {
-      await api.startRunByGraph("collections");
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["approvals"] });
-        setDrafting(false);
-      }, 5000);
-    } catch {
-      setDrafting(false);
-    }
-  }
+  // FE1: refetch the queue when the collections run finishes, not on a timer
+  const chaserRun = useGraphRun("collections", [["approvals"]]);
+  const drafting = chaserRun.running;
+  const draftChasers = () => void chaserRun.start();
 
   return (
     <PageShell

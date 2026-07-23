@@ -535,6 +535,8 @@ export const api = {
   startRun: (graph: string, params: Record<string, unknown> = {}) =>
     request<RunOut>("POST", apiPaths.POST_AGENT_RUNS, { graph, params }),
   listRuns: () => request<RunOut[]>("GET", apiPaths.GET_AGENT_RUNS),
+  getRun: (runId: string) =>
+    request<RunOut>("GET", apiPaths.GET_AGENT_RUNS_RUN_ID.replace("{run_id}", runId)),
   streamPath: (runId: string) =>
     `${API_PREFIX}${apiPaths.GET_AGENT_RUNS_RUN_ID_STREAM.replace("{run_id}", runId)}`,
 };

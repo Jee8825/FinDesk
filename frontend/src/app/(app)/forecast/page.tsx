@@ -1,7 +1,7 @@
 "use client";
 // Forecast — "Band chart" (wireframe Forecast A, dark signature surface B3):
 // scenario bands (downside / base / upside), gap attribution, suggested cover.
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { FlaskConical, RefreshCw } from "lucide-react";
 import Link from "next/link";
@@ -17,6 +17,7 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { ForecastTerrain } from "@/components/ForecastTerrain";
+import { useGraphRun } from "@/hooks/useGraphRun";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -291,12 +292,9 @@ function SandboxCard({
 }
 
 function ForecastPageInner() {
-  const queryClient = useQueryClient();
   const forecast = useQuery({ queryKey: ["forecast"], queryFn: () => api.forecast(), retry: false });
-  const refresh = useMutation({
-    mutationFn: () => api.startRunByGraph("cash_forecast"),
-    onSuccess: () => setTimeout(() => queryClient.invalidateQueries({ queryKey: ["forecast"] }), 6000),
-  });
+  // FE1: refetch exactly when the run finishes — stream-driven, never a timer
+  const refresh = useGraphRun("cash_forecast", [["forecast"]]);
 
   const f = forecast.data;
   const [whatifWeeks, setWhatifWeeks] = useState<ForecastWeek[] | undefined>(undefined);
@@ -309,9 +307,13 @@ function ForecastPageInner() {
       subtitle="13-week scenario bands, gap attribution, click-through to invoices"
       annotation="GET /forecast · recomputed on ledger events"
       actions={
-        <PrimaryBtn onClick={() => refresh.mutate()} disabled={refresh.isPending}>
-          <RefreshCw size={14} className={refresh.isPending ? "animate-spin" : ""} />
-          {refresh.isPending ? "Recomputing…" : "Recompute"}
+        <PrimaryBtn onClick={() => void refresh.start()} disabled={refresh.running}>
+          <RefreshCw size={14} className={refresh.running ? "animate-spin" : ""} />
+          {refresh.running
+            ? refresh.stepName
+              ? `Recomputing · ${refresh.stepName}`
+              : "Recomputing…"
+            : "Recompute"}
         </PrimaryBtn>
       }
     >
