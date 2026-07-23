@@ -156,3 +156,23 @@ class BackendClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    async def close_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get("/internal/close/context", params={"tenant_id": tenant_id})
+        resp.raise_for_status()
+        return resp.json()
+
+    async def persist_close_run(
+        self, tenant_id: str, run_id: str, *, period: str, checklist: dict[str, Any]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/close/run",
+            json={
+                "tenant_id": tenant_id,
+                "run_id": run_id,
+                "period": period,
+                "checklist": checklist,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()

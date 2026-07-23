@@ -85,6 +85,7 @@ const RUN_LABELS: Record<string, string> = {
   cash_forecast: "Recomputed the cash forecast",
   working_capital: "Ranked working-capital options",
   enforcer_45day: "Updated 45-day interest telemetry",
+  month_end_close: "Assembled the close checklist",
 };
 
 export default function Dashboard() {

@@ -4,11 +4,12 @@
 // provenance drawer.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, FileDown, Info, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FileDown, Info, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { WhyDrawer } from "@/components/WhyDrawer";
+import { useGraphRun } from "@/hooks/useGraphRun";
 import {
   Card,
   ErrorNote,
@@ -26,6 +27,9 @@ const PERIODS = ["2026-04", "2026-05", "2026-06", "2026-07"];
 function CloseCard() {
   const queryClient = useQueryClient();
   const checklist = useQuery({ queryKey: ["close-checklist"], queryFn: () => api.closeChecklist() });
+  // the agent's evidence run — audited, critic-checked, visible in /runs;
+  // it can never sign off (that button below stays human)
+  const closeRun = useGraphRun("month_end_close", [["close-checklist"], ["runs"]]);
   const [rationale, setRationale] = useState("");
   const [signedNote, setSignedNote] = useState<string | null>(null);
   const signoff = useMutation({
@@ -50,6 +54,18 @@ function CloseCard() {
             {c.audit_head && ` · head ${c.audit_head.slice(0, 10)}…`}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[13px] font-bold text-ink transition-colors hover:bg-[var(--fill-2)]"
+          onClick={() => void closeRun.start()}
+          disabled={closeRun.running}
+          title="agent evidence run — audited + critic-checked, watch it in the Run Viewer"
+        >
+          <ClipboardCheck size={14} className={closeRun.running ? "animate-pulse" : ""} />
+          {closeRun.running
+            ? (closeRun.stepName ?? "Running…")
+            : "Run close agent"}
+        </button>
         <button
           className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[13px] font-bold text-ink transition-colors hover:bg-[var(--fill-2)]"
           onClick={async () => {
@@ -67,6 +83,7 @@ function CloseCard() {
         >
           <FileDown size={14} /> Close pack
         </button>
+        </div>
       </div>
 
       <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">

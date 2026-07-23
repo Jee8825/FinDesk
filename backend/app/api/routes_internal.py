@@ -794,3 +794,74 @@ async def commit_matches(
         committed=committed,
         queued=sum(1 for r in results if r.get("queued")),
     )
+
+
+# ---- month_end_close graph (F2 evidence run) --------------------------------
+
+
+class CloseContextOut(BaseModel):
+    period: str
+    checklist: dict[str, Any]
+
+
+@router.get("/close/context", response_model=CloseContextOut)
+async def close_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> CloseContextOut:
+    _check_token(x_internal_token)
+    from datetime import UTC, datetime
+
+    from app.config import get_settings
+    from app.services.close import build_checklist
+
+    now = datetime.now(UTC)
+    async with session_scope() as session:
+        checklist = await build_checklist(
+            session,
+            tenant_id=tenant_id,
+            now=now,
+            bank_rate_bps=get_settings().statutory_bank_rate_bps,
+        )
+    return CloseContextOut(period=now.strftime("%Y-%m"), checklist=checklist)
+
+
+class CloseRunPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    period: str
+    checklist: dict[str, Any]
+
+
+@router.post("/close/run")
+async def persist_close_run(
+    body: CloseRunPersist, x_internal_token: str | None = Header(None)
+) -> dict[str, Any]:
+    """Audit the evidence run. Never a sign-off — that stays a human
+    maker-checker act on POST /api/v1/close/signoff."""
+    _check_token(x_internal_token)
+    from app.services.audit import write_audit
+
+    async with session_scope() as session:
+        await write_audit(
+            session,
+            tenant_id=body.tenant_id,
+            actor={"kind": "agent", "run_id": body.run_id},
+            action="close.checklist_run",
+            entity_ref=f"close:{body.period}",
+            payload={
+                "period": body.period,
+                "ready": body.checklist.get("ready"),
+                "blockers": body.checklist.get("blockers"),
+                "warnings": body.checklist.get("warnings"),
+                "audit_head": body.checklist.get("audit_head"),
+                "checks": [
+                    {"id": c.get("id"), "ok": c.get("ok"), "value": c.get("value")}
+                    for c in body.checklist.get("checks", [])
+                ],
+            },
+        )
+    return {
+        "ready": body.checklist.get("ready"),
+        "blockers": body.checklist.get("blockers", []),
+        "warnings": body.checklist.get("warnings", []),
+    }

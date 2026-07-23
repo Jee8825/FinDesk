@@ -28,6 +28,8 @@ from findesk_agents.graphs.collections import graph as collections_graph
 from findesk_agents.graphs.collections.state import CollectionsState
 from findesk_agents.graphs.enforcer import graph as enforcer_graph
 from findesk_agents.graphs.enforcer.state import EnforcerState
+from findesk_agents.graphs.month_end_close import graph as close_graph
+from findesk_agents.graphs.month_end_close.state import CloseState
 from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
@@ -56,6 +58,7 @@ GRAPHS = {
     "job.forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
     "job.cash_forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
     "job.working_capital.": (wc_graph, lambda common, payload: WorkingCapitalState(**common)),
+    "job.month_end_close.": (close_graph, lambda common, payload: CloseState(**common)),
     "job.enforcer_tick.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
     "job.enforcer_45day.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
 }

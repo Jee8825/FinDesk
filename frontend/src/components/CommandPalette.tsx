@@ -8,6 +8,7 @@ import { Command } from "cmdk";
 import {
   ArrowRight,
   BookOpen,
+  ClipboardCheck,
   Radar,
   ScanSearch,
   Send,
@@ -65,6 +66,12 @@ const AGENT_ACTIONS: Array<{
     label: "Draft collection chases",
     hint: "drafts wait in approvals — never auto-sent",
     icon: <Send size={15} />,
+  },
+  {
+    graph: "month_end_close",
+    label: "Run month-end close",
+    hint: "evidence checklist · critic-checked · sign-off stays yours",
+    icon: <ClipboardCheck size={15} />,
   },
   {
     graph: "working_capital",

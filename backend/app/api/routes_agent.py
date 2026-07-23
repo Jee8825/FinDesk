@@ -34,6 +34,7 @@ KNOWN_GRAPHS = {
     "cash_forecast",
     "working_capital",
     "enforcer_45day",
+    "month_end_close",
 }
 
 
