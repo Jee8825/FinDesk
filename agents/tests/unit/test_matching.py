@@ -1,6 +1,10 @@
 """Rules-matcher unit tests — pure logic, no I/O."""
 
-from findesk_agents.graphs.reconciliation.matching import critic_review, propose_matches
+from findesk_agents.graphs.reconciliation.matching import (
+    critic_review,
+    evidence_for_review,
+    propose_matches,
+)
 
 PARTIES = [
     {"id": "p1", "name": "Blue Tokai Coffee Pvt Ltd", "kind": "client"},
@@ -88,3 +92,26 @@ def test_critic_flags_closed_invoice_and_duplicates():
 
     dupes = critic_review(proposals + proposals, [_inv()])
     assert dupes[1]["critic_verdict"]["verdict"] == "fail"
+
+
+def test_evidence_for_review_attaches_narration_and_index():
+    """The critic cannot judge narration it was never sent (regression)."""
+    proposals = [
+        {"bank_transaction_id": "txn-1", "invoice_number": "INV-1"},
+        {"bank_transaction_id": "txn-2", "invoice_number": "INV-2"},
+    ]
+    txns = [
+        {"id": "txn-1", "narration": "NEFT FROM ZENITH TRADERS"},
+        {"id": "txn-2", "narration": "NEFT FROM ACME CORP"},
+    ]
+    out = evidence_for_review(proposals, txns)
+
+    assert [p["narration"] for p in out] == ["NEFT FROM ZENITH TRADERS", "NEFT FROM ACME CORP"]
+    assert [p["index"] for p in out] == [0, 1], "index must pin response mapping to position"
+    assert out[0]["invoice_number"] == "INV-1", "original fields survive"
+    assert "narration" not in proposals[0], "must not mutate the caller's proposals"
+
+
+def test_evidence_for_review_tolerates_a_missing_transaction():
+    out = evidence_for_review([{"bank_transaction_id": "gone"}], [])
+    assert out[0]["narration"] == "", "absent txn degrades to empty, never raises"

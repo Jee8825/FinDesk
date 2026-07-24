@@ -168,7 +168,12 @@ async def critic(state: ReconState) -> dict:
         ]
         prompt = render_prompt(
             "agents/critic@v1",
-            proposals=json.dumps([p for _, p in passes], default=str),
+            proposals=json.dumps(
+                matching.evidence_for_review(
+                    [p for _, p in passes], state.context.get("unmatched", [])
+                ),
+                default=str,
+            ),
             counterparties=json.dumps(state.context.get("counterparties", [])),
         )
         result = await llm.complete_json(prompt)

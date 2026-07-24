@@ -105,6 +105,33 @@ def propose_matches(
     return proposals
 
 
+def evidence_for_review(
+    proposals: list[dict[str, Any]],
+    transactions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach the bank narration each proposal was derived from, plus an index.
+
+    A proposal dict carries IDs and amounts but not the narration it came from
+    (see ``propose_matches``). Two of the critic prompt's four veto criteria —
+    "narration suggests a different counterparty" and "TDS rate inconsistent
+    with the service the narration implies" — are unanswerable without it, so
+    handing the raw proposals to the LLM asks it to judge evidence it cannot
+    see. The explicit ``index`` pins the response mapping to position rather
+    than relying on the model to preserve list order.
+
+    Pure: returns new dicts, never mutates the inputs.
+    """
+    by_id = {t["id"]: t for t in transactions}
+    return [
+        {
+            **p,
+            "index": i,
+            "narration": by_id.get(p.get("bank_transaction_id"), {}).get("narration", ""),
+        }
+        for i, p in enumerate(proposals)
+    ]
+
+
 def propose_tds_matches(
     unmatched: list[dict[str, Any]],
     open_invoices: list[dict[str, Any]],
