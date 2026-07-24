@@ -448,6 +448,24 @@ export type ImsRecordItem = {
   matched_bill_number: string | null;
   recommendation: string | null;
   note: string | null;
+  // deemed-acceptance clock — pending rows only; decided rows have no deadline
+  deemed_accept_at: string | null;
+  days_remaining: number | null;
+  urgency: ImsUrgency | null;
+};
+
+/** Bands are fixed in backend/app/services/statutory.py — never derive them here. */
+export type ImsUrgency = "safe" | "due_soon" | "urgent" | "lapsed";
+
+export type ImsClock = {
+  filing_frequency: string;
+  next_deadline: string | null;
+  days_remaining: number | null;
+  urgency: ImsUrgency;
+  itc_at_risk_paise: number;
+  itc_lapsed_paise: number;
+  lapsing_soon_paise: number;
+  lapsed_count: number;
 };
 
 export type ImsQueueOut = {
@@ -460,6 +478,7 @@ export type ImsQueueOut = {
     accepted_tax_paise: number;
     rejected_tax_paise: number;
   };
+  clock: ImsClock;
   ca_note: string;
 };
 

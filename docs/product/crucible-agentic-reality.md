@@ -27,9 +27,36 @@ session, or `[I]` inferred from convergent external sources (cited).
 >   proposal, `llama-3.1-8b-instant` returned `pass` where
 >   `llama-3.3-70b-versatile` correctly returned `fail`. Keep the critic on heavy.
 >
-> Findings 2–8 (no conditional edges, hardcoded planner, no checkpointer, the
-> `decide_approval` if-ladder, graph test coverage, observability) are unchanged
-> and remain the substance of N4/N5.
+> **Second update — N5 and N3 shipped.**
+>
+> - **N5 (conditional edges) — partly done, deliberately.** `recon` now branches
+>   `critic → {commit | escalate}`, which also closed a silent-loss bug: a vetoed
+>   proposal was discarded by the backend with the flat reason "critic rejected",
+>   so the critic's actual finding never reached anyone. It is now run evidence
+>   carrying the checker provenance. `collections` branches
+>   `fetch_overdue → {draft | nothing_due}` (a guard, labelled as one).
+>   `month_end_close` and `cash_forecast` critics deliberately still **raise**: a
+>   violation there means the engine is internally inconsistent, so the run must
+>   fail loudly, and routing them to a node reporting "succeeded" would be a
+>   regression in honesty. The real close win — a bounded remediation cycle
+>   (blockers → dispatch the graph that clears them → re-check) — needs an
+>   internal enqueue endpoint and so a contract change; still open.
+> - **Finding 7 partly closed:** first graph-level tests for non-`ping` graphs
+>   (both recon branches, both collections branches, topology assertions). They
+>   stub the LLM so the unit suite never depends on a key being present.
+> - **N3 (IMS deemed-accept clock) — shipped.** Second instance of the
+>   `statutory.py` clock pattern: `gstr3b_due` / `ims_deemed_accept_at` /
+>   `ims_urgency` / `ims_clock_snapshot`, 36 test vectors, plus an
+>   `itc_clock_rollup` and a `tenants.gst_filing_frequency` column (0017) for
+>   monthly-vs-QRMP grace. The `/ims` queue now carries a per-record countdown
+>   and a queue rollup; the close checklist item escalates from `warn` to
+>   **`block`** inside the urgent band. Live: `3 pending · ₹1,40,033.05 ITC
+>   decided in 27d`, banner and per-row chips rendering, contract surface clean.
+>
+> Still unchanged: the hardcoded planner, no checkpointer/`interrupt()`, the
+> `decide_approval` if-ladder (**N4**), and observability (**N2**). N1 — the
+> `43B(h)` → `§37(2)(g)` tax-year citation — is untouched and still the
+> cheapest credibility win on the list.
 
 ---
 

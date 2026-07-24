@@ -140,7 +140,7 @@ paths:
   /ims/sync:
     post: { tags: [ims], summary: "Pull the tenant's IMS queue (fixture GSP today) and re-run the deterministic 3-way match + recommendation; decided states are terminal for sync", responses: { "200": { description: counts } } }
   /ims/queue:
-    get: { tags: [ims], summary: "IMS triage queue — records with match tier / recommendation / evidence note + ITC-at-stake totals", responses: { "200": { description: queue } } }
+    get: { tags: [ims], summary: "IMS triage queue — records with match tier / recommendation / evidence note, ITC-at-stake totals, and the deemed-acceptance clock (per-record deemed_accept_at/days_remaining/urgency + a queue rollup: next_deadline, itc_at_risk_paise, itc_lapsed_paise, lapsing_soon_paise)", responses: { "200": { description: queue } } }
   /ims/records/{record_id}/action:
     parameters: [{ name: record_id, in: path, required: true, schema: { type: string } }]
     post:

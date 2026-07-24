@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import Bill, Counterparty, ImsRecord
+from app.services import statutory
 from app.services.audit import write_audit
 
 # Amount agreement thresholds for the tolerant tier: rounding-level deltas
@@ -163,6 +164,52 @@ def classify(
         ),
         matched_bill_number=None,
     )
+
+
+def itc_clock_rollup(
+    rows: Sequence[Any], *, frequency: str, now: datetime
+) -> dict[str, Any]:
+    """Deemed-acceptance rollup across pending records. Pure.
+
+    Answers the only question that matters once GSTR-3B Table 4 is hard-locked:
+    how much credit is about to be decided for this tenant by doing nothing, and
+    when. ``urgency`` is the worst band present, because a queue is exactly as
+    urgent as its most urgent row.
+    """
+    pending = [r for r in rows if r.state == "pending"]
+    empty = {
+        "filing_frequency": frequency,
+        "next_deadline": None,
+        "days_remaining": None,
+        "urgency": "safe",
+        "itc_at_risk_paise": 0,
+        "itc_lapsed_paise": 0,
+        "lapsing_soon_paise": 0,
+        "lapsed_count": 0,
+    }
+    if not pending:
+        return empty
+
+    snaps = [
+        statutory.ims_clock_snapshot(
+            period=r.period, now=now, frequency=frequency, tax_paise=r.tax_paise
+        )
+        for r in pending
+    ]
+    soonest = min(snaps, key=lambda s: s["days_remaining"])
+    lapsed = [s for s in snaps if s["urgency"] == "lapsed"]
+    return {
+        "filing_frequency": frequency,
+        "next_deadline": soonest["deemed_accept_at"],
+        "days_remaining": soonest["days_remaining"],
+        "urgency": soonest["urgency"],
+        "itc_at_risk_paise": sum(s["itc_at_risk_paise"] for s in snaps),
+        "itc_lapsed_paise": sum(s["itc_deemed_paise"] for s in snaps),
+        "lapsing_soon_paise": sum(
+            s["itc_at_risk_paise"] for s in snaps if s["urgency"] == "urgent"
+        ),
+        "lapsed_count": len(lapsed),
+    }
 
 
 def queue_totals(rows: Sequence[Any]) -> dict[str, int]:

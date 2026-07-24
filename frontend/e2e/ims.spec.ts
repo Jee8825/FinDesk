@@ -54,3 +54,28 @@ test("command palette reaches the ims shield", async ({ page }) => {
   await expect(page).toHaveURL(/\/ims/);
   await expect(page.getByRole("heading", { name: "IMS · ITC Shield" })).toBeVisible();
 });
+
+test("deemed-acceptance clock counts down and names the consequence", async ({ page }) => {
+  await page.goto("/ims");
+  const rows = page.locator("tbody tr");
+  if ((await rows.count()) === 0) {
+    await page.getByRole("button", { name: /Pull IMS queue/ }).click();
+  }
+  await expect(rows.first()).toBeVisible();
+
+  // Every pending row carries a deadline chip: a countdown, "decides today",
+  // or "deemed accepted" once the wall is behind it. Data-conditional — which
+  // band shows depends on how the fixture periods sit relative to today.
+  const chips = page.getByText(/\d+d to decide|decides today|deemed accepted/);
+  await expect(chips.first()).toBeVisible();
+
+  // The banner only appears when something is genuinely at stake, so assert it
+  // only when the queue is out of the "safe" band.
+  const banner = page.getByRole("status");
+  if (await banner.count()) {
+    await expect(banner.first()).toContainText(/ITC (is decided|was deemed accepted)/);
+    await expect(banner.first()).toContainText(/deemed accepted/);
+    // the reason the deadline bites: Table 4 is locked
+    await expect(banner.first()).toContainText(/Table 4 is hard-locked/);
+  }
+});

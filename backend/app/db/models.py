@@ -40,6 +40,11 @@ class Tenant(TimestampedTenanted, Base):
 
     name: Mapped[str] = mapped_column(String(200))
     plan: Mapped[str] = mapped_column(String(20), default="startup")
+    # monthly|quarterly — sets the IMS deemed-acceptance grace window. Defaults
+    # to the shorter one so an unconfigured tenant is warned early, not late.
+    gst_filing_frequency: Mapped[str] = mapped_column(
+        String(10), default="monthly", server_default="monthly"
+    )
 
 
 class User(TimestampedTenanted, Base):

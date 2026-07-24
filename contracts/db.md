@@ -21,7 +21,9 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
 `tenant_id` (FK, RLS), `created_at`, `updated_at` (UTC); money `BIGINT` paise.
 
 ## Identity & tenancy
-- **tenants**: name, gstin[], udyam_no?, plan, parent_tenant_id? (multi-entity)
+- **tenants**: name, gstin[], udyam_no?, plan, parent_tenant_id? (multi-entity),
+  gst_filing_frequency `monthly|quarterly` (QRMP) — sets the IMS
+  deemed-acceptance grace window; defaults to `monthly` (the shorter one)
 - **users**: email, password_hash, totp_secret?
 - **memberships**: user_id, tenant_id, role `owner|accountant|ca|viewer`
 - **counterparties**: kind `vendor|client|both`, name, gstin?, msme_status?,

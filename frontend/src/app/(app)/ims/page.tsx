@@ -21,7 +21,15 @@ import {
   StatCard,
   stagger,
 } from "@/components/ui";
-import { api, formatINR, formatINRCompact, type ImsRecordItem } from "@/lib/api";
+import {
+  api,
+  formatINR,
+  formatINRCompact,
+  formatISTDate,
+  type ImsClock,
+  type ImsRecordItem,
+  type ImsUrgency,
+} from "@/lib/api";
 
 const TIER_LABEL: Record<string, string> = {
   exact: "exact match",
@@ -37,6 +45,64 @@ const STATE_TONE: Record<string, "good" | "warn" | "bad" | "neutral"> = {
   rejected: "bad",
   pending: "neutral",
 };
+
+const URGENCY_TONE: Record<ImsUrgency, "good" | "warn" | "bad" | "neutral"> = {
+  safe: "neutral",
+  due_soon: "warn",
+  urgent: "bad",
+  lapsed: "bad",
+};
+
+/** Days left before the portal decides for you. Never invents a band — the
+ *  server sends `urgency` from the statutory engine. */
+function DeadlineChip({ rec }: { rec: ImsRecordItem }) {
+  if (!rec.urgency || rec.days_remaining === null) return null;
+  const d = rec.days_remaining;
+  const label =
+    rec.urgency === "lapsed"
+      ? "deemed accepted"
+      : d === 0
+        ? "decides today"
+        : `${d}d to decide`;
+  return <Pill tone={URGENCY_TONE[rec.urgency]}>{label}</Pill>;
+}
+
+/** The headline consequence: what silence costs, and when. Only shown when
+ *  there is genuinely something at stake. */
+function DeadlineBanner({ clock }: { clock: ImsClock }) {
+  if (!clock.next_deadline || clock.urgency === "safe") return null;
+  const lapsed = clock.urgency === "lapsed";
+  const critical = lapsed || clock.urgency === "urgent";
+  return (
+    <div
+      role="status"
+      className={`mb-5 rounded-lg border px-5 py-4 ${
+        critical ? "border-blush/40 bg-blush/5" : "border-dark-line bg-dark-card2/40"
+      }`}
+    >
+      <p className="text-sm font-bold text-dark-text">
+        {lapsed ? (
+          <>
+            {formatINR(clock.itc_lapsed_paise)} of ITC was deemed accepted — the deadline
+            passed
+          </>
+        ) : (
+          <>
+            {formatINR(clock.itc_at_risk_paise)} of ITC is decided{" "}
+            {clock.days_remaining === 0 ? "today" : `in ${clock.days_remaining} days`}
+          </>
+        )}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-dark-mute">
+        Unactioned records are <strong>deemed accepted</strong> after one tax period (
+        {clock.filing_frequency === "quarterly" ? "QRMP · quarterly" : "monthly"} filer ·
+        deadline {formatISTDate(clock.next_deadline)}). From the July-2026 period GSTR-3B
+        Table 4 is hard-locked, so a deemed acceptance cannot be corrected on your own
+        return.
+      </p>
+    </div>
+  );
+}
 
 function RecordRow({
   rec,
@@ -85,6 +151,11 @@ function RecordRow({
           <Pill tone={recTone}>
             {rec.recommendation === "accept" ? "recommend accept" : "needs review"}
           </Pill>
+        )}
+        {pending && (
+          <div className="mt-1.5">
+            <DeadlineChip rec={rec} />
+          </div>
         )}
         {!pending && <Pill tone={STATE_TONE[rec.state] ?? "neutral"}>{rec.state}</Pill>}
       </td>
@@ -169,6 +240,7 @@ export default function ImsPage() {
 
       {d && records.length > 0 && (
         <>
+          <DeadlineBanner clock={d.clock} />
           <motion.div
             {...stagger}
             className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4"
@@ -181,15 +253,20 @@ export default function ImsPage() {
             />
             <StatCard label="needs review" value={d.totals.review_count} tone="bad" />
             <StatCard
+              label={
+                d.clock.days_remaining === null
+                  ? "lapsing within 7d"
+                  : `lapsing within 7d (next: ${d.clock.days_remaining}d)`
+              }
+              value={d.clock.lapsing_soon_paise}
+              format={formatINRCompact}
+              tone="bad"
+            />
+            <StatCard
               label="accept-ready ITC"
               value={d.totals.accept_ready_paise}
               format={formatINRCompact}
               tone="good"
-            />
-            <StatCard
-              label="accepted this period"
-              value={d.totals.accepted_tax_paise}
-              format={formatINRCompact}
             />
           </motion.div>
 

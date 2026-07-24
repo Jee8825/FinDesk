@@ -17,9 +17,17 @@ from sqlalchemy import select
 from app.auth.deps import Auth
 from app.config import get_settings
 from app.db import session_scope
-from app.db.models import ImsRecord
+from app.db.models import ImsRecord, Tenant
+from app.services import statutory
 from app.services.approvals import queue_approval
-from app.services.ims import CA_NOTE, get_provider, list_queue, queue_totals, sync_and_match
+from app.services.ims import (
+    CA_NOTE,
+    get_provider,
+    itc_clock_rollup,
+    list_queue,
+    queue_totals,
+    sync_and_match,
+)
 
 router = APIRouter(tags=["ims"])
 
@@ -67,16 +75,37 @@ class ImsRecordOut(BaseModel):
     matched_bill_number: str | None
     recommendation: str | None
     note: str | None
+    # deemed-acceptance clock (pending rows only; decided rows have no deadline)
+    deemed_accept_at: str | None = None
+    days_remaining: int | None = None
+    urgency: str | None = None
+
+
+class ImsClockOut(BaseModel):
+    """Rollup of what silence costs, and when."""
+
+    filing_frequency: str
+    next_deadline: str | None
+    days_remaining: int | None
+    urgency: str
+    itc_at_risk_paise: int
+    itc_lapsed_paise: int
+    lapsing_soon_paise: int
+    lapsed_count: int
 
 
 class ImsQueueOut(BaseModel):
     records: list[ImsRecordOut]
     totals: dict[str, int]
+    clock: ImsClockOut
     ca_note: str
 
 
-def _out(r: ImsRecord) -> ImsRecordOut:
+def _out(r: ImsRecord, clock: dict[str, Any] | None = None) -> ImsRecordOut:
     return ImsRecordOut(
+        deemed_accept_at=clock["deemed_accept_at"] if clock else None,
+        days_remaining=clock["days_remaining"] if clock else None,
+        urgency=clock["urgency"] if clock else None,
         id=r.id,
         supplier_gstin=r.supplier_gstin,
         supplier_name=r.supplier_name,
@@ -97,11 +126,23 @@ def _out(r: ImsRecord) -> ImsRecordOut:
 
 @router.get("/ims/queue", response_model=ImsQueueOut)
 async def queue(auth: Auth) -> ImsQueueOut:
+    now = datetime.now(UTC)
     async with session_scope() as session:
         rows = await list_queue(session, tenant_id=auth.tenant_id)
+        tenant = await session.get(Tenant, auth.tenant_id)
+        frequency = (tenant.gst_filing_frequency if tenant else None) or "monthly"
+        # a decided record has no deadline left to run — only pending rows carry a clock
+        clocks = {
+            r.id: statutory.ims_clock_snapshot(
+                period=r.period, now=now, frequency=frequency, tax_paise=r.tax_paise
+            )
+            for r in rows
+            if r.state == "pending"
+        }
         return ImsQueueOut(
-            records=[_out(r) for r in rows],
+            records=[_out(r, clocks.get(r.id)) for r in rows],
             totals=queue_totals(rows),
+            clock=ImsClockOut(**itc_clock_rollup(rows, frequency=frequency, now=now)),
             ca_note=CA_NOTE,
         )
 

@@ -16,12 +16,44 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.books_repo import BooksRepo
-from app.db.models import Anomaly, Forecast, ImsRecord
+from app.db.models import Anomaly, Forecast, ImsRecord, Tenant
 from app.services.audit import verify_chain, write_audit
 from app.services.conflicts import list_open_conflicts
+from app.services.ims import itc_clock_rollup
 from app.services.payables import gather_items
 
 FORECAST_FRESH_DAYS = 7
+
+
+def ims_severity(clock: dict[str, Any]) -> str:
+    """Whether an un-actioned IMS queue blocks the close, or merely warns.
+
+    Pending records are normally a warning — there is still time. Inside the
+    urgent band (or already past it) they are not: silence *is* the accept, and
+    with GSTR-3B Table 4 hard-locked from the July-2026 period the resulting ITC
+    position cannot be corrected on your own return. Signing off a period while
+    credit is being decided by inaction is exactly what a close is meant to
+    prevent, so it blocks.
+    """
+    return "block" if clock["urgency"] in ("urgent", "lapsed") else "warn"
+
+
+def ims_check_value(pending: int, clock: dict[str, Any]) -> str:
+    """Human-readable state of the IMS check. Pure."""
+    from findesk_shared import format_inr
+
+    if not pending:
+        return "0 pending"
+    if clock["urgency"] == "lapsed":
+        return (
+            f"{pending} pending · {format_inr(clock['itc_lapsed_paise'])} "
+            "ITC already deemed accepted"
+        )
+    days = clock["days_remaining"]
+    when = "today" if days == 0 else f"in {days}d"
+    return (
+        f"{pending} pending · {format_inr(clock['itc_at_risk_paise'])} ITC decided {when}"
+    )
 
 
 def summarize(checks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -105,21 +137,26 @@ async def build_checklist(
         }
     )
 
-    ims_pending = (
-        await session.scalar(
-            select(func.count())
-            .select_from(ImsRecord)
-            .where(ImsRecord.tenant_id == tenant_id, ImsRecord.state == "pending")
+    ims_rows = list(
+        await session.scalars(
+            select(ImsRecord).where(
+                ImsRecord.tenant_id == tenant_id, ImsRecord.state == "pending"
+            )
         )
-        or 0
+    )
+    tenant = await session.get(Tenant, tenant_id)
+    ims_clock = itc_clock_rollup(
+        ims_rows,
+        frequency=(tenant.gst_filing_frequency if tenant else None) or "monthly",
+        now=now,
     )
     checks.append(
         {
             "id": "ims_actioned",
             "label": "IMS queue actioned (ITC decided)",
-            "ok": ims_pending == 0,
-            "severity": "warn",
-            "value": f"{ims_pending} pending",
+            "ok": len(ims_rows) == 0,
+            "severity": ims_severity(ims_clock),
+            "value": ims_check_value(len(ims_rows), ims_clock),
             "href": "/ims",
         }
     )

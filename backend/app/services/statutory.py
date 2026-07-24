@@ -22,7 +22,7 @@ ladder *states* below are fixed.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 STATUTORY_WINDOW_DAYS = 45
@@ -110,4 +110,124 @@ def clock_snapshot(
         "accrued_interest_paise": accrued_interest_paise(amount_paise, days, bank_rate_bps),
         "annual_rate_bps": annual_rate_bps(bank_rate_bps),
         "escalation_level": escalation_level(days),
+    }
+
+
+# --------------------------------------------------------------------------
+# GST Invoice Management System — the deemed-acceptance clock
+# --------------------------------------------------------------------------
+# Second statutory clock, same posture as §15 above: pure, deterministic, and
+# it never decides — it states a date and a consequence.
+#
+# Legal basis (framing only — FinDesk prepares, never files):
+#
+# * A supplier-filed record sitting in IMS may be kept **pending for one tax
+#   period**: one month for a monthly filer, one quarter under QRMP.
+# * If no accept/reject action is taken by that deadline, the portal marks the
+#   record **deemed accepted**. Silence is not neutral — it *is* a decision,
+#   made for you, and it fixes your ITC position for the period.
+# * From the July-2026 period, Table 4 of GSTR-3B is hard-locked: ITC is
+#   auto-populated from GSTR-2B/IMS and no longer manually editable, so a
+#   deemed acceptance can no longer be corrected on your own return.
+#
+# Implementation choices (documented because the rules leave edges open):
+# * The deadline is the GSTR-3B due date of the tax period FOLLOWING the
+#   record's own period — that is what "pending for one tax period" resolves to.
+# * QRMP GSTR-3B due dates are staggered 22nd/24th by state group. We use the
+#   22nd: being a day early costs nothing, being a day late costs the credit.
+#   Deployments in a 24th-group state may override via GSTR3B_QUARTERLY_DUE_DAY.
+# * Dates are date-granular in UTC. Portal cut-offs are IST wall-clock; the
+#   day-level answer is what a human acts on, and the UI renders IST.
+#
+# NO LLM TOUCHES THIS MODULE.
+
+GSTR3B_MONTHLY_DUE_DAY = 20
+GSTR3B_QUARTERLY_DUE_DAY = 22
+IMS_URGENT_DAYS = 7
+IMS_DUE_SOON_DAYS = 30
+FILING_FREQUENCIES = ("monthly", "quarterly")
+
+
+def _add_months(year: int, month: int, months: int) -> tuple[int, int]:
+    """Advance a (year, month) pair, 1-indexed months."""
+    idx = (year * 12 + (month - 1)) + months
+    return divmod(idx, 12)[0], divmod(idx, 12)[1] + 1
+
+
+def parse_period(period: str) -> tuple[int, int]:
+    """'2026-07' -> (2026, 7). Raises ValueError on anything else."""
+    year_s, _, month_s = period.partition("-")
+    year, month = int(year_s), int(month_s)
+    if not 1 <= month <= 12:
+        raise ValueError(f"month out of range in period {period!r}")
+    return year, month
+
+
+def quarter_end_month(month: int) -> int:
+    """Last month of the GST quarter containing ``month`` (Apr-Jun, Jul-Sep, ...).
+
+    GST quarters under QRMP follow the financial year: Apr-Jun, Jul-Sep,
+    Oct-Dec, Jan-Mar.
+    """
+    return ((month - 1) // 3) * 3 + 3
+
+
+def gstr3b_due(period: str, *, frequency: str = "monthly") -> datetime:
+    """When GSTR-3B for ``period`` falls due.
+
+    Monthly: the 20th of the following month. Quarterly: the 22nd of the month
+    following the quarter that contains ``period``.
+    """
+    if frequency not in FILING_FREQUENCIES:
+        raise ValueError(f"unknown filing frequency {frequency!r}")
+    year, month = parse_period(period)
+    if frequency == "monthly":
+        y, m = _add_months(year, month, 1)
+        return datetime(y, m, GSTR3B_MONTHLY_DUE_DAY, tzinfo=UTC)
+    y, m = _add_months(year, quarter_end_month(month), 1)
+    return datetime(y, m, GSTR3B_QUARTERLY_DUE_DAY, tzinfo=UTC)
+
+
+def ims_deemed_accept_at(period: str, *, frequency: str = "monthly") -> datetime:
+    """The moment an un-actioned record from ``period`` is deemed accepted.
+
+    One tax period of grace, so the deadline is the GSTR-3B due date of the
+    period *after* the record's own.
+    """
+    year, month = parse_period(period)
+    step = 1 if frequency == "monthly" else 3
+    y, m = _add_months(year, month, step)
+    return gstr3b_due(f"{y:04d}-{m:02d}", frequency=frequency)
+
+
+def ims_urgency(days_remaining: int) -> str:
+    """Deterministic band. Words are chosen elsewhere; the bands are fixed."""
+    if days_remaining < 0:
+        return "lapsed"
+    if days_remaining <= IMS_URGENT_DAYS:
+        return "urgent"
+    if days_remaining <= IMS_DUE_SOON_DAYS:
+        return "due_soon"
+    return "safe"
+
+
+def ims_clock_snapshot(
+    *,
+    period: str,
+    now: datetime,
+    frequency: str = "monthly",
+    tax_paise: int = 0,
+) -> dict:
+    """One pending record's deemed-acceptance state — the IMS row payload."""
+    deadline = ims_deemed_accept_at(period, frequency=frequency)
+    days_remaining = (deadline.date() - now.date()).days
+    return {
+        "period": period,
+        "filing_frequency": frequency,
+        "deemed_accept_at": deadline.isoformat(),
+        "days_remaining": days_remaining,
+        "urgency": ims_urgency(days_remaining),
+        # what silence costs: the credit that gets accepted without a decision
+        "itc_at_risk_paise": tax_paise if days_remaining >= 0 else 0,
+        "itc_deemed_paise": tax_paise if days_remaining < 0 else 0,
     }
