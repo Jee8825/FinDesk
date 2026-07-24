@@ -1,9 +1,11 @@
 """Rules-matcher unit tests — pure logic, no I/O."""
 
 from findesk_agents.graphs.reconciliation.matching import (
+    any_committable,
     critic_review,
     evidence_for_review,
     propose_matches,
+    vetoed_with_reasons,
 )
 
 PARTIES = [
@@ -115,3 +117,47 @@ def test_evidence_for_review_attaches_narration_and_index():
 def test_evidence_for_review_tolerates_a_missing_transaction():
     out = evidence_for_review([{"bank_transaction_id": "gone"}], [])
     assert out[0]["narration"] == "", "absent txn degrades to empty, never raises"
+
+
+# --- critic routing predicates (the recon graph's one real branch) -----------
+
+def _p(verdict, **kw):
+    return {"critic_verdict": {"verdict": verdict, **kw.pop("cv", {})}, **kw}
+
+
+def test_any_committable_true_when_one_proposal_passes():
+    assert any_committable([_p("fail"), _p("pass")]) is True
+
+
+def test_any_committable_false_when_all_vetoed():
+    assert any_committable([_p("fail"), _p("fail")]) is False
+
+
+def test_any_committable_false_on_empty_and_on_missing_verdict():
+    assert any_committable([]) is False
+    assert any_committable([{}]) is False, "a proposal with no verdict is not committable"
+
+
+def test_vetoed_with_reasons_carries_the_critics_finding():
+    proposals = [
+        _p("pass", invoice_number="INV-1", amount_paise=100),
+        _p(
+            "fail",
+            invoice_number="INV-2",
+            amount_paise=200,
+            cv={"problems": ["llm: narration names a different company"],
+                "checker": "deterministic-v0+llm:groq:llama-3.3-70b-versatile"},
+        ),
+    ]
+    out = vetoed_with_reasons(proposals)
+
+    assert len(out) == 1, "passes are not findings"
+    assert out[0]["invoice_number"] == "INV-2"
+    assert out[0]["problems"] == ["llm: narration names a different company"]
+    # provenance travels with the finding — a human sees *who* vetoed it
+    assert "groq:llama-3.3-70b-versatile" in out[0]["checker"]
+
+
+def test_vetoed_with_reasons_tolerates_a_bare_verdict():
+    out = vetoed_with_reasons([_p("fail", invoice_number="INV-3")])
+    assert out[0]["problems"] == [] and out[0]["checker"] == ""

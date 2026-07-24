@@ -105,6 +105,34 @@ def propose_matches(
     return proposals
 
 
+def any_committable(proposals: list[dict[str, Any]]) -> bool:
+    """True when at least one proposal survived the critic.
+
+    The router's predicate, kept pure and here rather than in nodes.py so the
+    branch decision is unit-testable without constructing graph state.
+    """
+    return any(p.get("critic_verdict", {}).get("verdict") == "pass" for p in proposals)
+
+
+def vetoed_with_reasons(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The critic's findings on proposals it rejected, shaped for run evidence.
+
+    ``services/recon.py`` discards a rejected proposal with the flat reason
+    "critic rejected", so the critic's *actual* finding — often the most
+    specific thing a run produced — never reaches a human. This lifts it out.
+    """
+    return [
+        {
+            "invoice_number": p.get("invoice_number"),
+            "amount_paise": p.get("amount_paise"),
+            "problems": p.get("critic_verdict", {}).get("problems", []),
+            "checker": p.get("critic_verdict", {}).get("checker", ""),
+        }
+        for p in proposals
+        if p.get("critic_verdict", {}).get("verdict") != "pass"
+    ]
+
+
 def evidence_for_review(
     proposals: list[dict[str, Any]],
     transactions: list[dict[str, Any]],
