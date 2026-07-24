@@ -34,6 +34,23 @@ _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 Role = Literal["heavy", "light"]
 
 
+def _first_json_object(text: str) -> dict[str, Any]:
+    """Parse the first JSON object in ``text``, ignoring anything around it.
+
+    Models intermittently wrap a correct answer in prose, or append a second
+    object after it — observed live on llama-3.3-70b, where plain ``json.loads``
+    raised "Extra data" on an answer that was otherwise exactly right and cost a
+    needless fallback hop. ``raw_decode`` stops at the first complete value.
+    """
+    start = text.find("{")
+    if start == -1:
+        raise json.JSONDecodeError("no json object found", text, 0)
+    obj, _ = json.JSONDecoder().raw_decode(text[start:])
+    if not isinstance(obj, dict):
+        raise json.JSONDecodeError("expected a json object", text, start)
+    return obj
+
+
 def render_prompt(name: str, **kwargs: str) -> str:
     """Load prompts/<name>.md by name (hard rule #3: no inline prompts)."""
     path = _PROMPTS_DIR / f"{name}.md"
@@ -96,7 +113,7 @@ class ChatLLM:
                 resp.raise_for_status()
                 text = resp.json()["choices"][0]["message"]["content"]
             fence = _FENCE_RE.search(text)
-            return json.loads(fence.group(1) if fence else text)
+            return _first_json_object(fence.group(1) if fence else text)
         except (httpx.HTTPError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
             log.warning("llm candidate %s failed (%s)", cand.provenance, exc)
             return None

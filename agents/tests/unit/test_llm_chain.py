@@ -7,6 +7,7 @@ when the whole thing degrades to deterministic), not httpx.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -121,3 +122,46 @@ def test_openrouter_alone_still_works(monkeypatch):
 
     monkeypatch.setattr(llm_mod, "get_settings", lambda: S())
     assert get_llm("heavy").chain == ["openrouter:or-h"]
+
+
+# --- response parsing (regressions from live provider behaviour) -------------
+
+def test_parses_json_followed_by_trailing_prose():
+    """llama-3.3-70b appends extra content after a correct answer (observed live)."""
+    out = llm_mod._first_json_object('{"reviews": [{"index": 0}]}\nHope this helps!')
+    assert out == {"reviews": [{"index": 0}]}
+
+
+def test_parses_json_preceded_by_prose():
+    out = llm_mod._first_json_object('Here is my answer:\n{"verdict": "fail"}')
+    assert out == {"verdict": "fail"}
+
+
+def test_ignores_a_second_object_after_the_first():
+    out = llm_mod._first_json_object('{"a": 1}{"b": 2}')
+    assert out == {"a": 1}
+
+
+def test_rejects_a_response_with_no_object():
+    with pytest.raises(json.JSONDecodeError):
+        llm_mod._first_json_object("I cannot answer that.")
+
+
+def test_rejects_a_bare_json_array():
+    """The critic contract is an object; a list would break every caller."""
+    with pytest.raises(json.JSONDecodeError):
+        llm_mod._first_json_object("[1, 2, 3]")
+
+
+async def test_unparseable_primary_falls_through_to_the_next_provider():
+    """A parse failure must be treated as a candidate failure, not a hard stop."""
+    chat = ChatLLM(_cands("groq", "openrouter"))
+    calls: list[str] = []
+
+    async def fake(cand, prompt, max_tokens):
+        calls.append(cand.provider)
+        return None if cand.provider == "groq" else {"ok": True}
+
+    chat._attempt = fake  # type: ignore[method-assign]
+    assert await chat.complete_json("p") == {"ok": True}
+    assert calls == ["groq", "openrouter"]
