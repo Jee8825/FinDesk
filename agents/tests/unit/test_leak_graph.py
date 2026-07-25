@@ -180,3 +180,58 @@ def test_graph_branches_after_recurrence():
     g = leak_graph.build_graph().get_graph()
     targets = {e.target for e in g.edges if e.source == "detect_recurrence"}
     assert targets == {"recall_usage", "nothing_recurring"}
+
+
+async def test_llm_vendor_labels_reach_the_persisted_rows(monkeypatch):
+    """Regression: canonicalize mutated state.debits in place without RETURNING
+    it, so every rename was silently discarded — the step still reported
+    "renamed: N" while the persisted rows kept their raw narrations. Asserting
+    the step metric would not have caught this; only the output does."""
+
+    class FakeLLM:
+        model = "fake:test"
+
+        async def complete_json(self, prompt, **kw):
+            # only the canonicalization prompt carries "narrations"
+            if '"narrations"' in prompt:
+                return {"vendors": [{"slug": "notion-team-plan", "name": "Notion"}]}
+            return None
+
+    monkeypatch.setattr(leak_nodes, "get_llm", lambda role: FakeLLM())
+    debits = _debits("NOTION TEAM PLAN", [400000] * 3 + [460000] * 4)
+    _, backend = await _run(FakeBackend(debits))
+
+    row = next(r for r in backend.persisted if r["vendor_slug"] == "notion-team-plan")
+    assert row["vendor_label"] == "Notion", (
+        f"got {row['vendor_label']!r} — the rename did not survive the graph"
+    )
+
+
+async def test_a_rename_for_an_unknown_slug_is_ignored():
+    """A hallucinated slug must never introduce a vendor with no transactions."""
+
+    class RogueLLM:
+        model = "fake:rogue"
+
+        async def complete_json(self, prompt, **kw):
+            if '"narrations"' in prompt:
+                return {"vendors": [{"slug": "vendor-that-does-not-exist", "name": "Ghost"}]}
+            return None
+
+    debits = _debits("NOTION TEAM PLAN", [400000] * 7)
+    backend = FakeBackend(debits)
+    state = SubscriptionState(
+        tenant_id="t1", run_id="r1", emitter=FakeEmitter(),
+        backend=backend, memory=FakeMemory(),
+    )
+    import findesk_agents.graphs.subscription_scan.nodes as n
+    original = n.get_llm
+    try:
+        n.get_llm = lambda role: RogueLLM()
+        await leak_graph.run(state)
+    finally:
+        n.get_llm = original
+
+    labels = {r["vendor_label"] for r in backend.persisted}
+    assert "Ghost" not in labels
+    assert all(r["vendor_slug"] != "vendor-that-does-not-exist" for r in backend.persisted)

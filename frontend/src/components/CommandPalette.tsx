@@ -4,7 +4,7 @@
 // gated pipeline as everywhere else (nothing consequential bypasses
 // approvals). cmdk does the fuzzy matching; we feed it value strings.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Command } from "cmdk";
+import { Command, useCommandState } from "cmdk";
 import {
   ArrowRight,
   BookOpen,
@@ -18,7 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { api, formatINR } from "@/lib/api";
+import { api, formatINR, type TxnPage } from "@/lib/api";
 
 const PAGES: Array<{ href: string; label: string; hint: string }> = [
   { href: "/", label: "Dashboard", hint: "cash position, runway, live agent feed" },
@@ -82,6 +82,13 @@ const AGENT_ACTIONS: Array<{
   },
 ];
 
+// How much of the book the palette can search. Both matter: the fetch bounds
+// what we have, the render bounds what cmdk can filter.
+const PALETTE_TXN_LIMIT = 500;
+const PALETTE_TXN_RENDER = 40;
+// below this, the user is still typing a page name — do not flood the list
+const PALETTE_TXN_MIN_QUERY = 3;
+
 export function CommandPalette() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -99,10 +106,15 @@ export function CommandPalette() {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  // load the feed only while the palette is open; cmdk filters client-side
+  // Load the feed only while the palette is open; cmdk filters client-side over
+  // what is RENDERED, so both numbers below bound what search can ever find.
+  // The default page (50) meant the palette silently could not locate anything
+  // outside the newest 50 transactions — the same first-page dead-end FE3 fixed
+  // on the books table. Server clamps limit at 500. Proper full-text search
+  // belongs server-side; this makes the palette honest for a real SME book.
   const txns = useQuery({
     queryKey: ["palette-txns"],
-    queryFn: () => api.transactions(),
+    queryFn: () => api.transactions(undefined, undefined, PALETTE_TXN_LIMIT),
     enabled: open,
     staleTime: 60_000,
   });
@@ -202,35 +214,63 @@ export function CommandPalette() {
               ))}
             </Command.Group>
 
-            {(txns.data?.items?.length ?? 0) > 0 && (
-              <Command.Group
-                heading="Transactions — enter opens Why?"
-                className="[&_[cmdk-group-heading]]:mono-label [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-faint"
-              >
-                {txns.data!.items.slice(0, 60).map((t) => (
-                  <Command.Item
-                    key={t.id}
-                    value={`txn ${t.narration} ${t.counterparty_hint ?? ""} ${t.match_status}`}
-                    onSelect={() => go(`/books?why=${t.id}`)}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-mute aria-selected:bg-[var(--fill-3)] aria-selected:text-ink"
-                  >
-                    <ArrowRight size={13} className="text-faint" />
-                    <span className="truncate">{t.narration}</span>
-                    <span className="tnum ml-auto shrink-0 font-mono text-xs text-faint">
-                      {formatINR(t.amount_paise)}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
+            <TransactionResults items={txns.data?.items ?? []} onPick={go} />
           </Command.List>
         )}
-
-        <div className="flex items-center justify-between border-t border-line2 px-4 py-2">
-          <span className="mono-annot">◇ every consequential action still lands in approvals</span>
-          <span className="mono-label text-faint">↑↓ · enter</span>
-        </div>
       </Command.Dialog>
     </>
+  );
+}
+
+/** Transactions, filtered by SUBSTRING against cmdk's own search state.
+ *
+ *  Deliberately not left to cmdk's fuzzy scorer. Two reasons, both learned the
+ *  hard way: a generic query like "ims" must rank the IMS *page* above a
+ *  transaction whose narration merely contains i-m-s as a subsequence, because
+ *  navigation is the palette's primary job; and transactions should only appear
+ *  once the user has typed something specific.
+ *
+ *  Reading the search via useCommandState keeps Command.Input UNCONTROLLED —
+ *  controlling it made selection depend on a React re-render, so a fast
+ *  type-then-Enter (exactly what an e2e test and an impatient user both do)
+ *  landed with nothing selected. */
+function TransactionResults({
+  items,
+  onPick,
+}: {
+  items: TxnPage["items"];
+  onPick: (href: string) => void;
+}) {
+  const search = useCommandState((state) => state.search);
+  const needle = search.trim().toLowerCase();
+  if (needle.length < PALETTE_TXN_MIN_QUERY) return null;
+
+  const matches = items
+    .filter((t) =>
+      `${t.narration} ${t.counterparty_hint ?? ""}`.toLowerCase().includes(needle),
+    )
+    .slice(0, PALETTE_TXN_RENDER);
+  if (matches.length === 0) return null;
+
+  return (
+    <Command.Group
+      heading="Transactions — enter opens Why?"
+      className="[&_[cmdk-group-heading]]:mono-label [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-faint"
+    >
+      {matches.map((t) => (
+        <Command.Item
+          key={t.id}
+          value={`txn ${t.narration} ${t.counterparty_hint ?? ""} ${t.match_status}`}
+          onSelect={() => onPick(`/books?why=${t.id}`)}
+          className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-mute aria-selected:bg-[var(--fill-3)] aria-selected:text-ink"
+        >
+          <ArrowRight size={13} className="text-faint" />
+          <span className="truncate">{t.narration}</span>
+          <span className="tnum ml-auto shrink-0 font-mono text-xs text-faint">
+            {formatINR(t.amount_paise)}
+          </span>
+        </Command.Item>
+      ))}
+    </Command.Group>
   );
 }

@@ -698,10 +698,11 @@ export const api = {
       apiPaths.POST_APPROVALS_APPROVAL_ID_DECIDE.replace("{approval_id}", id),
       { decision, rationale },
     ),
-  transactions: (statusFilter?: string, cursor?: string) => {
+  transactions: (statusFilter?: string, cursor?: string, limit?: number) => {
     const params = new URLSearchParams();
     if (statusFilter) params.set("status_filter", statusFilter);
     if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
     const qs = params.toString();
     return request<TxnPage>(
       "GET",

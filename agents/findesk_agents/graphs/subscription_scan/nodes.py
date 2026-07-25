@@ -89,7 +89,12 @@ async def canonicalize(state: SubscriptionState) -> dict:
         renamed=renamed,
         by=llm.model if llm else "deterministic-slug",
     )
+    # `debits` MUST be returned, not just mutated in place. A LangGraph node's
+    # state update is what it returns; relying on in-place mutation silently
+    # discarded every rename — the step still reported "renamed: N" while the
+    # persisted rows kept their raw narrations.
     return {
+        "debits": state.debits,
         "canonical_notes": [f"{len(groups)} vendors, {renamed} renamed by model"],
     }
 

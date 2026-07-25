@@ -112,6 +112,13 @@ class ChatLLM:
                 )
                 resp.raise_for_status()
                 text = resp.json()["choices"][0]["message"]["content"]
+            # Some models return content: null — reasoning-only replies, or a
+            # filtered/truncated completion. Observed live on gpt-oss-20b, where
+            # it surfaced as a bare TypeError from the regex and read like a bug
+            # in our parser rather than an empty answer from theirs.
+            if not text:
+                log.warning("llm candidate %s returned empty content", cand.provenance)
+                return None
             fence = _FENCE_RE.search(text)
             return _first_json_object(fence.group(1) if fence else text)
         except (httpx.HTTPError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:

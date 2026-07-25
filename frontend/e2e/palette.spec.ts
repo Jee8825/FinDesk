@@ -36,10 +36,13 @@ test("palette finds a transaction and jumps to its Why? drawer", async ({ page }
 });
 
 test("ledger beam pulses while an agent run is live", async ({ page }) => {
+  // The quiet wait below has to outlast the SLOWEST graph, because Playwright
+  // runs spec files in parallel and the beam is global. subscription_scan takes
+  // ~30s (two LLM providers plus a memory query per vendor), which made the old
+  // 30s window a guaranteed failure rather than the occasional flake it was.
+  test.setTimeout(150_000);
   await page.goto("/");
-  // a previous spec's run may still be draining — wait for quiet instead of
-  // asserting it (order-dependent flake seen twice in full-suite runs)
-  await expect(page.locator("[data-agent-live]")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator("[data-agent-live]")).toHaveCount(0, { timeout: 120_000 });
 
   await page.keyboard.press("ControlOrMeta+k");
   const input = page.getByPlaceholder(/Jump to a page/);

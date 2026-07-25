@@ -6,7 +6,8 @@ LangGraph state machines (Planner → Executor → Critic → Approval Gate) run
 workers consuming Redis streams. Graph catalog (implemented): ping,
 reconciliation, anomaly_scan, collections, enforcer_45day, cash_forecast,
 working_capital, month_end_close (evidence run only — sign-off stays a human
-act on the public API).
+act on the public API), subscription_scan (LeakRadar: cadence + price-drift
+detection; the LLM only names payees and explains numbers it cannot change).
 
 ## Layout
 - `graphs/<name>/` — `graph.py` (wiring only), `nodes.py`, `state.py` (typed)

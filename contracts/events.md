@@ -39,6 +39,7 @@ it is an operator inspection surface (`XRANGE agents:dead - +`).
 | `job.enforcer_tick.requested@v1` | `{ }` |
 | `job.forecast.requested@v1` | `{ debounce_key }` |
 | `job.month_end_close.requested@v1` | `{ period: "YYYY-MM", requested_by: user_id }` |
+| `job.subscription_scan.requested@v1` | `{ }` — LeakRadar re-scan; reads the tenant's full debit history and its `leak_mode` (business\|personal) from the DB, so the payload carries nothing |
 | `run.resume@v1` | `{ run_id, approval_id, decision: "approved"\|"rejected" }` |
 
 ## Domain events (any → any, fan-out)

@@ -48,6 +48,7 @@ own policy (guardrails), facts (app DB), or beliefs (memory).
 | `cash_forecast` | every ledger event (debounced) | B1 distributions → 3 scenarios → gap attribution | none (alerts only) |
 | `working_capital` | forecast gap detected | option pricing (TReDS/collect/re-time) → rank | every action recommend-only, gated |
 | `month_end_close` | user-initiated | fetch evidence checklist (8 engines) → critic (self-consistency) → persist audited run | none — sign-off is a separate human act (`POST /close/signoff`) |
+| `subscription_scan` | user-initiated (LeakRadar) | fetch debits → canonicalize payees (LLM, label only) → detect cadence → {recall usage → score → narrate → draft actions | nothing_recurring} → critic → persist | `send_email` per row (cancel/renegotiate draft, queued by `POST /leaks/{id}/action`) |
 
 Each graph lives in `agents/graphs/<name>/` with: `graph.py` (wiring only),
 `nodes.py`, `state.py` (typed LangGraph state), and unit tests with fake

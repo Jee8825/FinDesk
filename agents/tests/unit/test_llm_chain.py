@@ -165,3 +165,43 @@ async def test_unparseable_primary_falls_through_to_the_next_provider():
     chat._attempt = fake  # type: ignore[method-assign]
     assert await chat.complete_json("p") == {"ok": True}
     assert calls == ["groq", "openrouter"]
+
+
+async def test_null_content_is_treated_as_an_empty_answer(monkeypatch):
+    """Observed live on gpt-oss-20b: `content: null` surfaced as a bare TypeError
+    from the regex, which read like a bug in our parser rather than an empty
+    answer from theirs. Must degrade to the next candidate cleanly."""
+
+    class FakeResp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": None}}]}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **kw):
+            return FakeResp()
+
+    monkeypatch.setattr(llm_mod.httpx, "AsyncClient", lambda **kw: FakeClient())
+    chat = ChatLLM(_cands("groq"))
+    assert await chat.complete_json("p") is None
+
+
+async def test_empty_string_content_also_degrades():
+    chat = ChatLLM(_cands("groq", "openrouter"))
+    calls: list[str] = []
+
+    async def fake(cand, prompt, max_tokens):
+        calls.append(cand.provider)
+        return None if cand.provider == "groq" else {"ok": True}
+
+    chat._attempt = fake  # type: ignore[method-assign]
+    assert await chat.complete_json("p") == {"ok": True}
+    assert calls == ["groq", "openrouter"]

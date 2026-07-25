@@ -17,7 +17,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+# LeakRadar seeding parses a statement with the real tool and categorizes with
+# the agents' own lexicon, so the seed can never disagree with a real run.
+sys.path.insert(0, str(ROOT / "agents"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
 
@@ -140,6 +145,104 @@ async def ensure_second_tenant(session) -> str | None:
     session.add(Membership(user_id=user.id, tenant_id=tenant.id, role="ca"))
     print(f"seeded second tenant {SECOND_TENANT!r} (role ca) for {DEMO_EMAIL}")
     return tenant.id
+
+
+# --------------------------------------------------------------- LeakRadar
+# Two dedicated tenants so LeakRadar demos on CLEAN data. The main demo tenant
+# carries invoices, bills, IMS records and its own statements; dropping 75 more
+# debits into it drags AWS from monthly to irregular and pushes older
+# transactions out of the command palette's first page. Separate tenants also
+# make dual-mode demoable side by side, which is the point of having two modes.
+
+LEAK_TENANTS = (
+    ("LeakRadar Demo — Business", "business", "leakradar_business.csv", "XX7788"),
+    ("LeakRadar Demo — Personal", "personal", "leakradar_personal.csv", "XX9911"),
+)
+
+
+async def ensure_leak_tenants(session) -> list[str]:
+    """Idempotent: creates each tenant, its bank account, and its debits."""
+    from findesk_tools.bank_statements import parse_statement
+
+    from app.db.models import BankTransaction
+
+    users = UserRepo(session)
+    user = await users.by_email(DEMO_EMAIL)
+    if user is None:
+        return []
+
+    created: list[str] = []
+    for name, mode, fixture, account_ref in LEAK_TENANTS:
+        existing = await session.scalar(select(Tenant).where(Tenant.name == name))
+        if existing is not None:
+            print(f"leak tenant {name!r} already present")
+            created.append(existing.id)
+            continue
+
+        path = ROOT / "scripts" / "fixtures" / fixture
+        if not path.exists():
+            print(f"!! missing {fixture} — run scripts/make_leak_fixtures.py")
+            continue
+
+        # parent first, then flush: a single add_all does not guarantee insert
+        # order, so the bank account's FK to tenants can hit an absent row
+        tenant = Tenant(id=uuid7(), name=name, plan="startup", leak_mode=mode)
+        session.add(tenant)
+        await session.flush()
+
+        account = BankAccount(
+            id=uuid7(),
+            tenant_id=tenant.id,
+            bank="Demo Bank",
+            account_ref=account_ref,
+            source="upload",
+        )
+        session.add_all(
+            [account, Membership(user_id=user.id, tenant_id=tenant.id, role="owner")]
+        )
+        await session.flush()
+
+        result = parse_statement(path.read_text(encoding="utf-8"))
+        rows = 0
+        for txn in result.transactions:
+            if txn.direction != "dr":
+                continue
+            session.add(
+                BankTransaction(
+                    id=uuid7(),
+                    tenant_id=tenant.id,
+                    bank_account_id=account.id,
+                    external_ref=txn.external_ref,
+                    value_date=txn.value_date,
+                    amount_paise=txn.amount_paise,
+                    direction="dr",
+                    narration=txn.narration,
+                    counterparty_hint=txn.counterparty_hint,
+                    dedupe_hash=txn.dedupe_hash(),
+                    source={"kind": "bank_statement", "external_id": fixture},
+                    category_code=_leak_category(txn.narration),
+                    category_source="rule",
+                )
+            )
+            rows += 1
+        await session.flush()
+        print(f"seeded {name!r} ({mode}) — {rows} debits from {fixture}")
+        created.append(tenant.id)
+    return created
+
+
+def _leak_category(narration: str) -> str | None:
+    """Categorize at seed time using the agents' own lexicon.
+
+    Imported through the real categorizer rather than a copy, so the seed can
+    never disagree with what a reconciliation run would assign.
+    """
+    from findesk_agents.graphs.reconciliation.categorization import LEXICON
+
+    for pattern, code, _confidence in LEXICON:
+        if pattern.search(narration):
+            return code
+    return None
 
 
 async def ensure_books(session, tenant_id: str) -> None:
@@ -331,6 +434,8 @@ async def main() -> None:
         if second_id:
             await session.flush()
             await ensure_chart(session, second_id)  # empty books, real chart
+        for leak_id in await ensure_leak_tenants(session):
+            await ensure_chart(session, leak_id)
     await dispose_engine()
 
 

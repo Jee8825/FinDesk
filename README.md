@@ -33,6 +33,7 @@ Honesty is a feature. What exists versus what is roadmap:
 |---|---|---|
 | Bank statements (CSV/XLSX) | **Live** | Real import pipeline (`/books/imports`), exercised in nightly CI |
 | Ledger exports (Tally/Zoho files) | **Live** | File-first parser |
+| Bank debit-alert SMS | **Fixture-tested** | `tools/findesk_tools/sms_alerts` parses HDFC/ICICI/SBI/Axis/Kotak alert templates into the same row shape as the CSV parser, against recorded samples. No carrier or inbox access — nothing reads a real phone. |
 | TallyPrime HTTP-XML gateway | **Fixture-tested** | Real gateway protocol, tested against recorded XML; point it at a running TallyPrime (`localhost:9000`) to go live |
 | Email (chase drafts) | **Sandbox** | Writes `.eml` to a local outbox; refuses without an approval token — identical guardrail surface in prod |
 | TReDS | **Sandbox** | Recommendation quotes only; FinDesk never lists or discounts invoices itself |

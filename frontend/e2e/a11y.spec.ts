@@ -5,6 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const SIGNATURE_SURFACES = [
+  { path: "/leaks", name: "leakradar" },
   { path: "/payables", name: "payables shield" },
   { path: "/receivables", name: "45-day radar" },
   { path: "/approvals", name: "approvals" },
