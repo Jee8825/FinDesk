@@ -78,6 +78,32 @@ def _classify(period_days: float) -> tuple[str | None, int | None]:
     return None, None
 
 
+DUPLICATE_COLLAPSE_DAYS = 5
+
+
+def collapse_duplicates(txns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Treat a same-amount re-charge within a few days as ONE billing event.
+
+    Cadence is a property of the billing cycle, not of the charge count. A
+    monthly vendor that double-billed once produces a 3-day gap among 30-day
+    gaps, which drags the series into `irregular` and suppresses drift detection
+    on a vendor that is perfectly regular. The duplicate itself is not lost —
+    `anomaly_scan.detect_duplicates` reports it, and scoring counts it as
+    recoverable.
+    """
+    ordered = sorted(txns, key=_date)
+    kept: list[dict[str, Any]] = []
+    for t in ordered:
+        if kept:
+            prev = kept[-1]
+            same_amount = prev["amount_paise"] == t["amount_paise"]
+            close = (_date(t) - _date(prev)).days <= DUPLICATE_COLLAPSE_DAYS
+            if same_amount and close:
+                continue
+        kept.append(t)
+    return kept
+
+
 def detect_cadence(txns: list[dict[str, Any]], *, now: datetime) -> dict[str, Any] | None:
     """One vendor's series → cadence verdict, or None if it isn't a series.
 
@@ -90,7 +116,9 @@ def detect_cadence(txns: list[dict[str, Any]], *, now: datetime) -> dict[str, An
     if len(txns) < MIN_OCCURRENCES:
         return None
 
-    ordered = sorted(txns, key=_date)
+    ordered = collapse_duplicates(txns)
+    if len(ordered) < MIN_OCCURRENCES:
+        return None
     dates = [_date(t) for t in ordered]
     gaps = [(b - a).days for a, b in zip(dates, dates[1:], strict=False)]
     if not gaps or all(g == 0 for g in gaps):

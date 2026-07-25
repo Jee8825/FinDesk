@@ -181,3 +181,36 @@ def test_median_amount_is_representative_not_the_latest():
     v = detect_cadence(txns, now=NOW)
     assert v["amount_paise"] == 100_000
     assert v["latest_amount_paise"] == 500_000
+
+
+# --- duplicates must not destroy a cadence --------------------------------
+
+
+def test_a_double_billing_does_not_make_a_monthly_vendor_irregular():
+    """Regression: a same-amount re-charge three days later produced a 3-day gap
+    among 30-day gaps, dragging a perfectly regular vendor into `irregular` and
+    suppressing drift detection on it. Cadence is a property of the billing
+    cycle, not the charge count."""
+    txns = series(start=datetime(2026, 1, 13, tzinfo=UTC), gap_days=30, n=7)
+    dup = dict(txns[3])
+    dup["id"] = "dup"
+    dup["value_date"] = (
+        datetime.fromisoformat(txns[3]["value_date"]) + timedelta(days=3)
+    ).isoformat()
+    v = detect_cadence([*txns, dup], now=NOW)
+    assert v["cadence"] == "monthly", f"got {v['cadence']} (period {v['period_days']})"
+    assert v["occurrences"] == 7, "the duplicate is collapsed, not counted twice"
+
+
+def test_a_genuine_price_change_is_not_collapsed():
+    """Only SAME-amount near-duplicates collapse; a different amount days later
+    is a real second charge."""
+    from findesk_agents.graphs.subscription_scan.recurrence import collapse_duplicates
+
+    txns = series(start=datetime(2026, 3, 1, tzinfo=UTC), gap_days=30, n=3)
+    extra = dict(txns[1])
+    extra["amount_paise"] = 250_000
+    extra["value_date"] = (
+        datetime.fromisoformat(txns[1]["value_date"]) + timedelta(days=2)
+    ).isoformat()
+    assert len(collapse_duplicates([*txns, extra])) == 4

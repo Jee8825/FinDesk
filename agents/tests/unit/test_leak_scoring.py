@@ -97,7 +97,7 @@ def test_an_unapproved_hike_is_recoverable():
 
 def test_suspicion_alone_never_makes_the_full_cost_recoverable():
     """Bank data cannot know whether anyone logged in. Never counted."""
-    out = score_one(_c(), NO_DRIFT, category_peers=3, usage=None)
+    out = score_one(_c(category_code="streaming"), NO_DRIFT, category_peers=3, usage=None)
     assert out["recoverable_paise_per_year"] == 0
     assert out["leak_score"] > 0, "redundancy still raises the score"
 
@@ -124,7 +124,7 @@ def test_duplicate_charges_are_recoverable():
 
 
 def test_components_are_always_exposed():
-    out = score_one(_c(), HIKE, category_peers=2)
+    out = score_one(_c(category_code="streaming"), HIKE, category_peers=2)
     assert set(out["score_components"]) == {
         "drift", "duplicate", "unused", "redundancy", "renewal"
     }
@@ -197,3 +197,88 @@ def test_portfolio_totals_exclude_stopped_and_group_by_category():
     assert t["recoverable_paise_per_year"] == 15_000 * 12
     assert t["leaking_count"] == 1
     assert list(t["by_category_paise"]) == ["marketing", "software_cloud"]
+
+
+# --- redundancy only counts where the category implies the same job ---------
+
+
+def test_redundancy_fires_for_genuinely_overlapping_categories():
+    out = score_one(_c(category_code="streaming"), NO_DRIFT, category_peers=3)
+    assert out["score_components"]["redundancy"] == 15
+
+
+def test_redundancy_is_suppressed_for_catch_all_software_cloud():
+    """AWS and GitHub are both software_cloud and overlap not at all. Left
+    unguarded this signal fires on every SaaS tool a company owns."""
+    out = score_one(_c(category_code="software_cloud"), NO_DRIFT, category_peers=8)
+    assert out["score_components"]["redundancy"] == 0
+    assert out["leak_score"] == 0, "no other signal — must stay quiet"
+
+
+def test_two_peers_scores_half_the_redundancy_weight():
+    out = score_one(_c(category_code="cloud_storage"), NO_DRIFT, category_peers=2)
+    assert out["score_components"]["redundancy"] == 7.5
+
+
+def test_category_peer_counts_ignores_stopped_series():
+    from findesk_agents.graphs.subscription_scan.scoring import category_peer_counts
+
+    counts = category_peer_counts([
+        {"category_code": "streaming", "status": "active"},
+        {"category_code": "streaming", "status": "active"},
+        {"category_code": "streaming", "status": "stopped"},
+        {"category_code": "rent", "status": "active"},
+    ])
+    assert counts == {"streaming": 2, "rent": 1}
+
+
+# --- the score must never contradict its own rupee figure -------------------
+
+SEAT_CREEP = {
+    "kind": "seat_creep",
+    "step_change": None,
+    "seat_creep": {"step_paise": 120_000, "steps": 3, "total_paise": 360_000},
+    "annualized_extra_paise": 360_000 * 12,
+    "note": "Rising in steps of about 1,200 rupees (3 increases) — this looks "
+            "like seats added rather than a price change.",
+}
+
+
+def test_seat_creep_scores_even_though_it_has_no_step_change():
+    """Regression: seat creep reports no step_change, so a pct-only drift
+    component left the top recoverable row sitting at score 0."""
+    out = score_one(_c(latest_amount_paise=720_000), SEAT_CREEP)
+    assert out["recoverable_paise_per_year"] > 0
+    assert out["leak_score"] > 0, "a row with recoverable money cannot score zero"
+    assert out["score_components"]["drift"] > 0
+
+
+def test_any_row_with_recoverable_money_scores_above_zero():
+    """The invariant behind that regression, and it is ONE-directional.
+
+    recoverable > 0 must imply score > 0 — money always has to rank. The
+    converse is deliberately false: an annual renewal coming up, or three
+    overlapping streaming services, are advisory signals worth surfacing with
+    nothing yet recoverable. Asserting equivalence here would fail on perfectly
+    correct data.
+    """
+    cases = [
+        score_one(_c(), HIKE),
+        score_one(_c(latest_amount_paise=720_000), SEAT_CREEP),
+        score_one(_c(), NO_DRIFT, duplicate_paise=50_000),
+        score_one(_c(), NO_DRIFT, usage="unused"),
+    ]
+    for out in cases:
+        assert out["recoverable_paise_per_year"] > 0
+        assert out["leak_score"] > 0, out
+
+
+def test_advisory_signals_score_without_any_recoverable_money():
+    """The converse direction, stated so nobody 'fixes' it into equivalence."""
+    renewal = score_one(
+        _c(cadence="annual", periods_per_year=1, days_until_next=20), NO_DRIFT
+    )
+    redundant = score_one(_c(category_code="streaming"), NO_DRIFT, category_peers=3)
+    for out in (renewal, redundant):
+        assert out["leak_score"] > 0
+        assert out["recoverable_paise_per_year"] == 0

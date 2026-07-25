@@ -32,6 +32,16 @@ EXCLUDED_CATEGORIES_PERSONAL = frozenset(
     {"rent", "loan_emi", "insurance", "investment", "taxes"}
 )
 
+# Redundancy only means something where sharing a category implies doing the
+# same job. Three streaming services genuinely overlap; AWS and GitHub are both
+# `software_cloud` and overlap not at all, so a catch-all category would fire
+# this signal on every SaaS tool a company owns and turn it into noise.
+# Consolidation is a human call — this allowlist keeps us from pretending
+# otherwise.
+REDUNDANCY_CATEGORIES = frozenset(
+    {"streaming", "cloud_storage", "fitness", "food_delivery", "telecom"}
+)
+
 # Signal weights, summing to 100 before the magnitude adjustment.
 W_DRIFT = 30
 W_DUPLICATE = 25
@@ -99,18 +109,24 @@ def score_one(
         )
 
     drift_extra = max(0, drift.get("annualized_extra_paise", 0))
-    drift_pct = abs((drift.get("step_change") or {}).get("pct", 0.0))
+    # Prefer the measured step percentage, but fall back to the annualized
+    # increase over run-rate. Seat creep reports no step_change, and without
+    # this fallback a row could carry real recoverable money while scoring zero
+    # — a score that contradicts its own rupee figure is worse than no score.
+    step_pct = abs((drift.get("step_change") or {}).get("pct", 0.0))
+    drift_pct = step_pct or (drift_extra / run_rate if run_rate else 0.0)
     unused = usage == "unused"
     renewal_due = (
         cadence.get("cadence") == "annual"
         and 0 <= (cadence.get("days_until_next") or 999) <= RENEWAL_HORIZON_DAYS
     )
 
+    redundant_peers = category_peers if category in REDUNDANCY_CATEGORIES else 1
     components = {
         "drift": round(W_DRIFT * min(1.0, drift_pct / DRIFT_SATURATION), 1),
         "duplicate": float(W_DUPLICATE if duplicate_paise > 0 else 0),
         "unused": float(W_UNUSED if unused else 0),
-        "redundancy": round(W_REDUNDANCY * min(1.0, max(0, category_peers - 1) / 2), 1),
+        "redundancy": round(W_REDUNDANCY * min(1.0, max(0, redundant_peers - 1) / 2), 1),
         "renewal": float(W_RENEWAL if renewal_due else 0),
     }
     base = sum(components.values())
@@ -185,6 +201,18 @@ def recommend(
     if kind == "usage_based":
         return "Usage-based — set a budget alert rather than cancelling."
     return "Keep — no leak signal detected."
+
+
+def category_peer_counts(
+    cadences: list[dict[str, Any]],
+) -> dict[str | None, int]:
+    """Active subscriptions per category, for the redundancy signal."""
+    counts: dict[str | None, int] = {}
+    for c in cadences:
+        if c.get("status") != "active":
+            continue
+        counts[c.get("category_code")] = counts.get(c.get("category_code"), 0) + 1
+    return counts
 
 
 def rank(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
