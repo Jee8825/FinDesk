@@ -135,6 +135,9 @@ function UsageControl({
   busy: boolean;
 }) {
   if (row.status === "stopped") return <span className="mono-annot">already stopped</span>;
+  // a commitment is not a subscription — asking whether payroll is "still used"
+  // is a nonsense question and offering the control implies it can be cancelled
+  if (row.drift_kind === "excluded") return <span className="mono-annot">commitment</span>;
   if (row.usage === "unused")
     return <Pill tone="bad">confirmed unused</Pill>;
   if (row.usage === "in_use") return <Pill tone="good">in use</Pill>;

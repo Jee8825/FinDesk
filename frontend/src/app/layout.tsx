@@ -27,8 +27,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FinDesk — The Autonomous CFO",
-  description: "Clean books. Defended cash. For Indian SMEs.",
+  title: "LeakRadar — Find the money leaving quietly",
+  description:
+    "Detects every recurring payment, the price hikes nobody noticed, and what each one really costs you a year. Built on the FinDesk engine.",
 };
 
 export const viewport: Viewport = {
