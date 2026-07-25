@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Mirrors this repo to the hackathon remote every 2 hours.
+  Trickles this repo to the hackathon remote: one small lap every 20 min for
+  ~8 hours (24 laps), then a 2-hourly sync. See scripts/ops/trickle_push.sh.
 
   Install:    cp scripts/ops/com.findesk.mirror-push.plist ~/Library/LaunchAgents/
               launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.findesk.mirror-push.plist
   Run now:    launchctl kickstart -k gui/$(id -u)/com.findesk.mirror-push
   Stop:       launchctl bootout gui/$(id -u)/com.findesk.mirror-push
+  Progress:   cat var/trickle-push.state    # laps done, of 24
   Logs:       var/mirror-push.log
 -->
 <plist version="1.0">
@@ -17,15 +19,16 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/Jee/Hackathon/FInDesk/scripts/ops/mirror_push.sh</string>
+        <string>/Users/Jee/Hackathon/FInDesk/scripts/ops/trickle_push.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
     <string>/Users/Jee/Hackathon/FInDesk</string>
 
-    <!-- Every 2 hours. Fires on load, then on a 7200s cadence. -->
+    <!-- One lap every 20 min. 24 laps ~= 8h of backfill, then the script
+         self-throttles to a 2-hourly sync. Fires once on load. -->
     <key>StartInterval</key>
-    <integer>7200</integer>
+    <integer>1200</integer>
 
     <key>RunAtLoad</key>
     <true/>
