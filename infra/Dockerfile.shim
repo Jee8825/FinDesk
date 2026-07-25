@@ -1,0 +1,33 @@
+# Local embedding service for Recall — model2vec potion-base-8M, 256-dim, CPU.
+#
+# Its own image rather than reusing memory/infra/Dockerfile.backend, which has
+# neither model2vec nor the shim script, and whose ENTRYPOINT runs Recall's
+# migrations (so a `command:` override there fails on a missing Postgres).
+#
+# The model is baked in at BUILD time. Downloading it on first boot instead
+# would make a fresh VM depend on HuggingFace being reachable at the exact
+# moment the stack comes up, and turn a cold start into a multi-minute wait.
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir \
+      "model2vec>=0.3" "fastapi>=0.115" "uvicorn>=0.30" "pydantic>=2.8" "numpy>=1.26"
+
+# Warm the model into the image layer.
+RUN python -c "from model2vec import StaticModel; StaticModel.from_pretrained('minishlab/potion-base-8M')"
+
+# Path is relative to the REPO ROOT build context. The Dockerfile lives in
+# FinDesk's infra/, not memory/infra/, because memory/ is a vendored engine
+# and hard rule 5 forbids adding files to it.
+COPY memory/infra/dev/embedding_shim.py /app/embedding_shim.py
+
+EXPOSE 8090
+# Serve the module's `app` object rather than running the script, because its
+# __main__ block binds 127.0.0.1 — fine for the dev-host recipe, unreachable from
+# a sibling container. The script is vendored (hard rule 5), so this is overridden
+# here instead of patched there.
+#
+# Worth knowing why this was nearly missed: a healthcheck that curls localhost
+# INSIDE the container passes happily while the bind is wrong. Verify the shim
+# from another container, never from itself.
+CMD ["uvicorn", "embedding_shim:app", "--host", "0.0.0.0", "--port", "8090"]

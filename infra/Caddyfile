@@ -1,0 +1,16 @@
+# Terminates TLS and fronts the API. Set SITE_ADDRESS to your domain and Caddy
+# provisions a Let's Encrypt certificate automatically; leave it as :80 to serve
+# plain HTTP on the VM's IP (fine while you are still pointing DNS).
+#
+# Only the API is exposed. Postgres, Neo4j, Redis, the embedding shim and the
+# Recall API stay on the private compose network with no published ports —
+# a Neo4j or Postgres reachable from the internet is how demo boxes get owned.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# SSE for live agent runs must not be buffered or it arrives in one lump
+	# at the end, which looks exactly like a hang.
+	reverse_proxy api:8080 {
+		flush_interval -1
+	}
+}

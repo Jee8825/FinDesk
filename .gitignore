@@ -45,3 +45,4 @@ evals_out/
 graphify-out/
 .basic-memory/
 knowledge/.obsidian/
+.env.vm
