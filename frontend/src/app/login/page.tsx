@@ -32,7 +32,9 @@ export default function LoginPage() {
     setError(null);
     try {
       setTokens(await api.login(email, password));
-      router.push("/");
+      // LeakRadar is the product surface a first-time visitor should meet;
+      // the CFO dashboard stays one click away in the sidebar.
+      router.push("/leaks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "login failed");
     } finally {

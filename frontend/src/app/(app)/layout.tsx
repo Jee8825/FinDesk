@@ -189,6 +189,10 @@ function Sidebar() {
       ],
     },
     {
+      label: "LeakRadar",
+      items: [{ href: "/leaks", label: "Recurring Leaks" }],
+    },
+    {
       label: "Receivables",
       items: [
         { href: "/receivables", label: "45-Day Radar", badge: counts.radar },

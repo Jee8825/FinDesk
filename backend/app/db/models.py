@@ -411,6 +411,10 @@ class Subscription(TimestampedTenanted, Base):
     recommended_action: Mapped[str] = mapped_column(String(300), default="")
     narrative: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
+    # LLM-written {subject, body, kind} for the approval draft; produced by the
+    # scan (never in a request handler) and always human-approved before sending
+    draft: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
     # the one field a human owns: in_use | unused | None (never asked)
     usage: Mapped[str | None] = mapped_column(String(10), nullable=True)
     usage_confirmed_at: Mapped[datetime | None] = mapped_column(

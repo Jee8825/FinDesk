@@ -155,7 +155,11 @@ def score_one(
         "drift_kind": drift.get("kind"),
         "reason": drift.get("note", ""),
         "recommended_action": recommend(
-            drift, unused=unused, renewal_due=renewal_due, peers=category_peers
+            drift,
+            unused=unused,
+            renewal_due=renewal_due,
+            peers=redundant_peers,
+            duplicate_paise=duplicate_paise,
         ),
     }
 
@@ -183,13 +187,22 @@ def _zero(cadence, drift, run_rate, *, reason, kind) -> dict[str, Any]:
 
 
 def recommend(
-    drift: dict[str, Any], *, unused: bool, renewal_due: bool, peers: int
+    drift: dict[str, Any],
+    *,
+    unused: bool,
+    renewal_due: bool,
+    peers: int,
+    duplicate_paise: int = 0,
 ) -> str:
     """The action, chosen deterministically. Wording may later be LLM-polished;
     the choice never is."""
     if unused:
         return "Cancel — you confirmed this is no longer used."
     kind = drift.get("kind")
+    # a double charge is money on the table regardless of price stability, and
+    # saying "no leak signal detected" next to a recoverable figure reads as a bug
+    if duplicate_paise > 0 and kind in (None, "stable", "usage_based"):
+        return "Claim the duplicate charge — this vendor was billed twice."
     if kind == "seat_creep":
         return "Reconcile seats against headcount, then downgrade unused seats."
     if kind == "price_increase":

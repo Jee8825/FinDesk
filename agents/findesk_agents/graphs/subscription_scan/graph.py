@@ -16,6 +16,7 @@ def build_graph():
     g.add_node("recall_usage", nodes.recall_usage)
     g.add_node("score", nodes.score)
     g.add_node("narrate", nodes.narrate)
+    g.add_node("draft_actions", nodes.draft_actions)
     g.add_node("critic", nodes.critic_review)
     g.add_node("persist", nodes.persist)
     g.add_node("nothing_recurring", nodes.nothing_recurring)
@@ -34,7 +35,8 @@ def build_graph():
     # bank data cannot produce, and they must be in hand before scoring
     g.add_edge("recall_usage", "score")
     g.add_edge("score", "narrate")
-    g.add_edge("narrate", "critic")
+    g.add_edge("narrate", "draft_actions")
+    g.add_edge("draft_actions", "critic")
     g.add_edge("critic", "persist")
     g.add_edge("persist", END)
     g.add_edge("nothing_recurring", END)

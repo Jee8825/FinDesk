@@ -28,6 +28,7 @@ tags:
   - name: approvals
   - name: cash
   - name: ims
+  - name: leaks
   - name: close
   - name: why
   - name: webhooks
@@ -137,6 +138,20 @@ paths:
     get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, 43B(h) disallowance exposure per open bill", responses: { "200": { description: compliance } } }
   /payables/plan:
     get: { tags: [cash], summary: "Deduction Defense — deterministic ranked pay-first plan (closing windows by deadline, breached by daily §16 bleed), cash-aware via latest forecast", responses: { "200": { description: plan } } }
+  /leaks:
+    get: { tags: [leaks], summary: "LeakRadar table — recurring vendor series with cadence, silent price drift, leak score (0-100) + components, recoverable rupees per year, and category-wise annualized cost; excluded commitments (rent/payroll/EMI) are listed at score 0", responses: { "200": { description: leaks } } }
+  /leaks/{subscription_id}/usage:
+    post:
+      tags: [leaks]
+      summary: "Record whether the user still uses a subscription — the one leak signal bank data cannot produce; written to Recall as a decaying belief and picked up by the next scan"
+      parameters: [{ name: subscription_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: recorded }, "404": { description: not found } }
+  /leaks/{subscription_id}/action:
+    post:
+      tags: [leaks]
+      summary: "Queue a cancel/renegotiate/downgrade vendor email for maker-checker approval using the draft the scan wrote; never sends (\u26a0 consequential \u2014 send happens in decide_approval with a single-use token)"
+      parameters: [{ name: subscription_id, in: path, required: true, schema: { type: string } }]
+      responses: { "202": { description: queued }, "409": { description: no draft yet } }
   /ims/sync:
     post: { tags: [ims], summary: "Pull the tenant's IMS queue (fixture GSP today) and re-run the deterministic 3-way match + recommendation; decided states are terminal for sync", responses: { "200": { description: counts } } }
   /ims/queue:

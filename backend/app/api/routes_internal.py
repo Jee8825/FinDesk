@@ -972,6 +972,8 @@ async def persist_leaks(
             }
             if (narrative := row.get("narrative")) is not None:
                 fields["narrative"] = narrative[:1000]
+            if (draft := row.get("draft")) is not None:
+                fields["draft"] = draft
             found = existing.get(row["vendor_slug"])
             if found is None:
                 session.add(

@@ -482,6 +482,71 @@ export type ImsQueueOut = {
   ca_note: string;
 };
 
+
+// ---------------------------------------------------------------- LeakRadar
+
+/** Bands are decided in agents/.../recurrence.py — never derived client-side. */
+export type LeakCadence =
+  | "weekly"
+  | "fortnightly"
+  | "monthly"
+  | "quarterly"
+  | "annual"
+  | "irregular";
+
+export type LeakRow = {
+  id: string;
+  vendor_slug: string;
+  vendor_label: string;
+  category_code: string | null;
+  cadence: LeakCadence;
+  period_days: number;
+  periods_per_year: number | null;
+  occurrences: number;
+  confidence: number;
+  first_seen: string;
+  last_seen: string;
+  next_expected: string;
+  status: "active" | "stopped";
+  amount_paise: number;
+  latest_amount_paise: number;
+  run_rate_paise: number;
+  drift_kind: string | null;
+  drift_paise_per_year: number;
+  duplicate_paise: number;
+  leak_score: number;
+  score_components: Record<string, number>;
+  recoverable_paise_per_year: number;
+  reason: string;
+  recommended_action: string;
+  narrative: string | null;
+  usage: "in_use" | "unused" | null;
+  usage_confirmed_at: string | null;
+  has_draft: boolean;
+};
+
+export type LeakTotals = {
+  subscriptions: number;
+  stopped: number;
+  committed_paise_per_year: number;
+  /** subscription spend only — commitments are reported separately so they
+   *  cannot flatten the category chart */
+  subscription_paise_per_year: number;
+  commitments_paise_per_year: number;
+  recoverable_paise_per_year: number;
+  drift_paise_per_year: number;
+  leaking_count: number;
+  unreviewed_count: number;
+  by_category_paise: Record<string, number>;
+};
+
+export type LeakListOut = {
+  rows: LeakRow[];
+  totals: LeakTotals;
+  mode: "business" | "personal";
+  note: string;
+};
+
 export type ImsSyncOut = {
   period: string;
   pulled: number;
@@ -559,6 +624,19 @@ export const api = {
     ),
   payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
   imsQueue: () => request<ImsQueueOut>("GET", apiPaths.GET_IMS_QUEUE),
+  leaks: () => request<LeakListOut>("GET", apiPaths.GET_LEAKS),
+  leakUsage: (id: string, usage: "in_use" | "unused") =>
+    request<{ ok: boolean; usage: string; rescore_required: boolean }>(
+      "POST",
+      apiPaths.POST_LEAKS_SUBSCRIPTION_ID_USAGE.replace("{subscription_id}", id),
+      { usage },
+    ),
+  leakAction: (id: string, kind: "cancel" | "renegotiate" | "downgrade") =>
+    request<{ ok: boolean; approval_id: string; kind: string }>(
+      "POST",
+      apiPaths.POST_LEAKS_SUBSCRIPTION_ID_ACTION.replace("{subscription_id}", id),
+      { kind },
+    ),
   imsSync: () => request<ImsSyncOut>("POST", apiPaths.POST_IMS_SYNC),
   imsAction: (recordId: string, targetState: "accepted" | "rejected") =>
     request<{ ok: boolean; approval_id: string }>(

@@ -282,3 +282,21 @@ def test_advisory_signals_score_without_any_recoverable_money():
     for out in (renewal, redundant):
         assert out["leak_score"] > 0
         assert out["recoverable_paise_per_year"] == 0
+
+
+def test_a_duplicate_charge_is_recommended_even_when_the_price_is_stable():
+    """Regression: a row with a recoverable duplicate said "Keep — no leak signal
+    detected", which reads as a bug sitting next to a rupee figure."""
+    out = score_one(_c(), NO_DRIFT, duplicate_paise=236_000)
+    assert out["recoverable_paise_per_year"] == 236_000
+    assert "duplicate" in out["recommended_action"].lower()
+    assert "no leak signal" not in out["recommended_action"]
+
+
+def test_consolidation_advice_only_fires_for_allowlisted_categories():
+    """Redundancy advice must follow the same allowlist as the score, or the
+    text and the number disagree."""
+    catch_all = score_one(_c(category_code="software_cloud"), NO_DRIFT, category_peers=8)
+    assert "Consolidate" not in catch_all["recommended_action"]
+    real = score_one(_c(category_code="streaming"), NO_DRIFT, category_peers=3)
+    assert "Consolidate" in real["recommended_action"]

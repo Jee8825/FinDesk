@@ -24,6 +24,7 @@ from findesk_agents.llm import get_llm, render_prompt
 # would otherwise blow the context and the free-tier token budget in one call.
 CANONICAL_BATCH = 40
 NARRATIVE_BATCH = 15
+DRAFT_BATCH = 8
 
 
 async def fetch(state: SubscriptionState) -> dict:
@@ -290,6 +291,73 @@ def _invents_a_number(text: str, source: dict[str, Any]) -> bool:
         if token not in supplied:
             return True
     return False
+
+
+async def draft_actions(state: SubscriptionState) -> dict:
+    """Write the email that carries out each row's already-decided action.
+
+    The action itself is chosen deterministically by `scoring.recommend()`; the
+    model only supplies wording, and nothing is sent from here — the draft sits on
+    the row until a human approves it, at which point the existing token-gated
+    email path does the sending.
+    """
+    step_id = uuid7()
+    await state.emitter.step("draft_actions", "started", step_id)
+    llm = get_llm("light")
+    rows = state.rows
+    actionable = [
+        r for r in rows if r["leak_score"] > 0 and r["recoverable_paise_per_year"] > 0
+    ][:DRAFT_BATCH]
+
+    if llm is None or not actionable:
+        await state.emitter.step(
+            "draft_actions", "finished", step_id, drafted=0, by="none"
+        )
+        return {}
+
+    payload = [
+        {
+            "slug": r["vendor_slug"],
+            "vendor": r["vendor_label"],
+            "action": r["recommended_action"],
+            "evidence": r["reason"],
+            "annual_cost": format_inr(r["run_rate_paise"]),
+            "at_stake_per_year": format_inr(r["recoverable_paise_per_year"]),
+        }
+        for r in actionable
+    ]
+    result = await llm.complete_json(
+        render_prompt("agents/leak_action@v1", items=json.dumps(payload)), max_tokens=2048
+    )
+    allowed = {p["slug"]: p for p in payload}
+    by_slug = {r["vendor_slug"]: r for r in rows}
+    drafted = rejected = 0
+    for entry in (result or {}).get("drafts", []):
+        slug = entry.get("slug")
+        subject = (entry.get("subject") or "").strip()
+        body = (entry.get("body") or "").strip()
+        if slug not in allowed or not subject or not body:
+            continue
+        if len(subject) > 80 or len(body) > 900:
+            rejected += 1
+            continue
+        # same post-check as the narrative: no invented rupee figures
+        if _invents_a_number(subject + " " + body, allowed[slug]):
+            rejected += 1
+            continue
+        by_slug[slug]["draft"] = {
+            "subject": subject,
+            "body": body,
+            "action": allowed[slug]["action"],
+            "by": llm.model,
+        }
+        drafted += 1
+
+    await state.emitter.step(
+        "draft_actions", "finished", step_id, drafted=drafted, rejected=rejected,
+        by=llm.model,
+    )
+    return {"rows": rows}
 
 
 async def critic_review(state: SubscriptionState) -> dict:
