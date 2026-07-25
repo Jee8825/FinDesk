@@ -35,6 +35,7 @@ KNOWN_GRAPHS = {
     "working_capital",
     "enforcer_45day",
     "month_end_close",
+    "subscription_scan",
 }
 
 

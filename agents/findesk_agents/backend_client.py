@@ -157,6 +157,23 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def leak_context(self, tenant_id: str) -> dict[str, Any]:
+        resp = await self._client.get(
+            "/internal/leaks/context", params={"tenant_id": tenant_id}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def persist_leaks(
+        self, tenant_id: str, run_id: str, rows: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        resp = await self._client.post(
+            "/internal/leaks",
+            json={"tenant_id": tenant_id, "run_id": run_id, "rows": rows},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def close_context(self, tenant_id: str) -> dict[str, Any]:
         resp = await self._client.get("/internal/close/context", params={"tenant_id": tenant_id})
         resp.raise_for_status()

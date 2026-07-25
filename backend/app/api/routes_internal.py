@@ -865,3 +865,123 @@ async def persist_close_run(
         "blockers": body.checklist.get("blockers", []),
         "warnings": body.checklist.get("warnings", []),
     }
+
+
+# ----------------------------------------------------------- LeakRadar (PS1)
+
+
+class LeakContext(BaseModel):
+    debits: list[dict[str, Any]]
+    mode: str
+
+
+@router.get("/leaks/context", response_model=LeakContext)
+async def leak_context(
+    tenant_id: str, x_internal_token: str | None = Header(None)
+) -> LeakContext:
+    """Full debit history plus the tenant's mode.
+
+    Same untruncated history the anomaly scan gets — cadence detection needs
+    every occurrence, and a windowed feed would silently shorten series and
+    change verdicts.
+    """
+    _check_token(x_internal_token)
+    from app.db.models import Tenant
+
+    async with session_scope() as session:
+        debits = await BooksRepo(session).debit_transactions(tenant_id)
+        tenant = await session.get(Tenant, tenant_id)
+        mode = (tenant.leak_mode if tenant else None) or "business"
+    return LeakContext(
+        mode=mode,
+        debits=[
+            {
+                "id": t.id,
+                "value_date": t.value_date.isoformat(),
+                "amount_paise": t.amount_paise,
+                "narration": t.narration,
+                "counterparty_hint": t.counterparty_hint,
+                "category_code": t.category_code,
+            }
+            for t in debits
+        ],
+    )
+
+
+class LeakPersist(BaseModel):
+    tenant_id: str
+    run_id: str
+    rows: list[dict[str, Any]]
+
+
+class LeakPersistOut(BaseModel):
+    created: int
+    updated: int
+
+
+@router.post("/leaks", response_model=LeakPersistOut)
+async def persist_leaks(
+    body: LeakPersist, x_internal_token: str | None = Header(None)
+) -> LeakPersistOut:
+    """Upsert one row per vendor series.
+
+    ``usage`` is never written here: a scan re-derives everything it can measure,
+    but the human's answer about whether they still use something is not
+    measurable and must survive every rescan.
+    """
+    _check_token(x_internal_token)
+    from sqlalchemy import select as _select
+
+    from app.db.models import Subscription
+
+    created = updated = 0
+    async with session_scope() as session:
+        existing = {
+            s.vendor_slug: s
+            for s in await session.scalars(
+                _select(Subscription).where(Subscription.tenant_id == body.tenant_id)
+            )
+        }
+        for row in body.rows:
+            fields = {
+                "vendor_label": row["vendor_label"],
+                "category_code": row.get("category_code"),
+                "cadence": row["cadence"],
+                "period_days": int(row.get("period_days") or 0),
+                "periods_per_year": row.get("periods_per_year"),
+                "occurrences": int(row.get("occurrences") or 0),
+                "confidence": float(row.get("confidence") or 0),
+                "first_seen": datetime.fromisoformat(row["first_seen"]),
+                "last_seen": datetime.fromisoformat(row["last_seen"]),
+                "next_expected": datetime.fromisoformat(row["next_expected"]),
+                "status": row["status"],
+                "amount_paise": int(row.get("amount_paise") or 0),
+                "latest_amount_paise": int(row.get("latest_amount_paise") or 0),
+                "run_rate_paise": int(row.get("run_rate_paise") or 0),
+                "drift_kind": row.get("drift_kind"),
+                "drift_paise_per_year": int(row.get("drift_paise_per_year") or 0),
+                "duplicate_paise": int(row.get("duplicate_paise") or 0),
+                "evidence": row.get("evidence") or {},
+                "leak_score": int(row.get("leak_score") or 0),
+                "score_components": row.get("score_components") or {},
+                "recoverable_paise_per_year": int(
+                    row.get("recoverable_paise_per_year") or 0
+                ),
+                "reason": (row.get("reason") or "")[:400],
+                "recommended_action": (row.get("recommended_action") or "")[:300],
+            }
+            if (narrative := row.get("narrative")) is not None:
+                fields["narrative"] = narrative[:1000]
+            found = existing.get(row["vendor_slug"])
+            if found is None:
+                session.add(
+                    Subscription(
+                        tenant_id=body.tenant_id, vendor_slug=row["vendor_slug"], **fields
+                    )
+                )
+                created += 1
+            else:
+                for key, value in fields.items():
+                    setattr(found, key, value)
+                updated += 1
+    return LeakPersistOut(created=created, updated=updated)

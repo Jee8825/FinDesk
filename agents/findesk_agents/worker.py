@@ -34,6 +34,8 @@ from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
 from findesk_agents.graphs.reconciliation.state import ReconState
+from findesk_agents.graphs.subscription_scan import graph as leak_graph
+from findesk_agents.graphs.subscription_scan.state import SubscriptionState
 from findesk_agents.graphs.working_capital import graph as wc_graph
 from findesk_agents.graphs.working_capital.state import WorkingCapitalState
 from findesk_agents.memoryclient import MemoryClient
@@ -59,6 +61,10 @@ GRAPHS = {
     "job.cash_forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
     "job.working_capital.": (wc_graph, lambda common, payload: WorkingCapitalState(**common)),
     "job.month_end_close.": (close_graph, lambda common, payload: CloseState(**common)),
+    "job.subscription_scan.": (
+        leak_graph,
+        lambda common, payload: SubscriptionState(**common),
+    ),
     "job.enforcer_tick.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
     "job.enforcer_45day.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
 }

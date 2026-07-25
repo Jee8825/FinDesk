@@ -45,6 +45,11 @@ class Tenant(TimestampedTenanted, Base):
     gst_filing_frequency: Mapped[str] = mapped_column(
         String(10), default="monthly", server_default="monthly"
     )
+    # business|personal — selects LeakRadar's exclusion list. A business book
+    # must never rank payroll as a leak; a personal one must never rank an EMI.
+    leak_mode: Mapped[str] = mapped_column(
+        String(10), default="business", server_default="business"
+    )
 
 
 class User(TimestampedTenanted, Base):
@@ -356,6 +361,61 @@ class Anomaly(TimestampedTenanted, Base):
     status: Mapped[str] = mapped_column(String(12), default="open", index=True)
     decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), unique=True)  # stable across rescans
+
+
+class Subscription(TimestampedTenanted, Base):
+    """A recurring vendor series — LeakRadar's unit of work.
+
+    Distinct in grain from ``Anomaly``: an anomaly is a finding about one
+    transaction, a subscription is a *series* with a lifecycle (active →
+    drifted → stopped). Upsert-by-vendor_slug, so a rescan refreshes rather
+    than duplicates, and ``usage`` survives rescans because it is the one field
+    a human owns.
+    """
+
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "vendor_slug", name="uq_subscription_tenant_vendor"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    vendor_slug: Mapped[str] = mapped_column(String(120))
+    vendor_label: Mapped[str] = mapped_column(String(120))
+    category_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    cadence: Mapped[str] = mapped_column(String(14), index=True)
+    period_days: Mapped[int] = mapped_column(Integer, default=0)
+    periods_per_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, default=0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_expected: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(10), default="active", index=True)
+
+    amount_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    latest_amount_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    run_rate_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    drift_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    drift_paise_per_year: Mapped[int] = mapped_column(BigInteger, default=0)
+    duplicate_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    leak_score: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    score_components: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    recoverable_paise_per_year: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    reason: Mapped[str] = mapped_column(String(400), default="")
+    recommended_action: Mapped[str] = mapped_column(String(300), default="")
+    narrative: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    # the one field a human owns: in_use | unused | None (never asked)
+    usage: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    usage_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Conflict(TimestampedTenanted, Base):
