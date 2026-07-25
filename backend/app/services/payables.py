@@ -1,4 +1,11 @@
-"""Buyer-side MSME payables compliance — §15 clock + 43B(h) tax exposure.
+"""Buyer-side MSME payables compliance — §15 clock + MSME disallowance exposure.
+
+The disallowance section is NOT hardcoded. It was §43B(h) of the Income-tax
+Act 1961 and is re-enacted as §37(2)(g) of the Income-tax Act 2025 (in force
+1 Apr 2026), and both are live during the transition — FY 2025-26 is still
+cited under §43B(h) via the §536 saving clause while it remains under audit.
+Every citation therefore comes from statutory.msme_disallowance_citation(),
+keyed to the bill's own tax year.
 
 The same statutory engine that powers the receivables radar, pointed the other
 way: bills *we* owe vendors who are registered micro/small enterprises.
@@ -24,6 +31,7 @@ from app.services.statutory import (
     STATUTORY_WINDOW_DAYS,
     accrued_interest_paise,
     annual_rate_bps,
+    msme_disallowance_citation,
     overdue_days,
     statutory_due,
 )
@@ -47,9 +55,21 @@ def effective_mse(self_status: str, verified_category: str | None) -> tuple[bool
     drift = (self_status in MSE_STATUSES) != in_scope
     return in_scope, "verified", drift
 
+def ca_note(now: datetime) -> str:
+    """Preparation-only framing, citing the section that governs `now`."""
+    citation = msme_disallowance_citation(now)
+    return (
+        f"{citation['label']} exposure ({citation['act']}, tax year "
+        f"{citation['tax_year']}) and §16 interest are computed as preparation "
+        "only — confirm vendor Udyam status and figures with your CA before "
+        "filing."
+    )
+
+
+# Kept for callers that only need the shape; prefer ca_note(now).
 CA_NOTE = (
-    "43B(h) exposure and §16 interest are computed as preparation only — "
-    "confirm vendor Udyam status and figures with your CA before filing."
+    "MSME disallowance exposure and §16 interest are computed as preparation "
+    "only — confirm vendor Udyam status and figures with your CA before filing."
 )
 
 
@@ -163,11 +183,14 @@ def compliance_row(
         # §16: interest we owe the vendor (compound, monthly rests, 3× bank rate)
         "interest_owed_paise": interest,
         "annual_rate_bps": annual_rate_bps(bank_rate_bps),
-        # 43B(h): if still unpaid at FY end, the expense deduction defers to the
+        # MSME disallowance: if still unpaid at FY end, the expense deduction
+        # defers to the
         # payment year. Exposure is the full bill amount once the window is
         # breached; §16 interest is never deductible.
         "disallowance_risk_paise": amount_paise if days_over > 0 else 0,
         "fy_end": fy_end(now).isoformat(),
+        # the section a CA should see next to this figure, for THIS tax year
+        "statute": msme_disallowance_citation(now),
     }
 
 
@@ -176,7 +199,7 @@ def defense_plan(
     *,
     cash_available_paise: int | None,
 ) -> dict[str, Any]:
-    """Ranked pay-first plan protecting the 43B(h) deduction. Pure.
+    """Ranked pay-first plan protecting the MSME expense deduction. Pure.
 
     Ordering logic (deterministic, defensible to a CA):
     1. **Closing-window bills first, tightest deadline first** — paying inside

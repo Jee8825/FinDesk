@@ -21,6 +21,7 @@ from app.services.audit import verify_chain, write_audit
 from app.services.conflicts import list_open_conflicts
 from app.services.ims import itc_clock_rollup
 from app.services.payables import gather_items
+from app.services.statutory import msme_disallowance_citation
 
 FORECAST_FRESH_DAYS = 7
 
@@ -119,7 +120,12 @@ async def build_checklist(
     checks.append(
         {
             "id": "payables_shield",
-            "label": "§15 clocks unbreached (43B(h))",
+            # cites the section governing the period being closed, which is
+            # not always the current one during the ITA-2025 transition
+            "label": (
+                "§15 clocks unbreached "
+                f"({msme_disallowance_citation(now)['label']})"
+            ),
             "ok": breached == 0,
             "severity": "warn",
             "value": f"{breached} breached",

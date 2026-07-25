@@ -11,7 +11,12 @@ test("payables shield renders shell, cards and CA framing", async ({ page }) => 
     timeout: 15_000,
   });
   await expect(page.getByText("open to MSE vendors")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("43B(h) at risk").first()).toBeVisible();
+  // the section is tax-year-dependent and SERVER-derived (§43B(h) under the
+  // ITA 1961 through FY 2025-26, §37(2)(g) under the ITA 2025 after), so match
+  // the citation rather than pinning one that goes stale on 1 April
+  await expect(
+    page.getByText(/(§37\(2\)\(g\)|§43B\(h\)|MSME disallowance) at risk/).first(),
+  ).toBeVisible();
   await expect(page.getByText("§16 interest owed").first()).toBeVisible();
   // CA framing ships on every response — review-before-filing is a guardrail
   await expect(page.getByText(/confirm vendor Udyam status/)).toBeVisible();

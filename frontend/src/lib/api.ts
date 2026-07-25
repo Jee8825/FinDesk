@@ -166,6 +166,18 @@ export function formatINR(amountPaise: number): string {
   }).format(rupees);
 }
 
+/** Which statute to cite for an MSME disallowance figure. Server-derived from
+ *  the bill's own tax year — §43B(h) (ITA 1961) through FY 2025-26, §37(2)(g)
+ *  (ITA 2025) from 1 Apr 2026. Never hardcode a section number in the UI. */
+export type StatuteCitation = {
+  section: string;
+  label: string;
+  act: string;
+  tax_year: string;
+  predecessor: string;
+  note: string;
+};
+
 export type Approval = {
   id: string;
   action_kind: string;
@@ -317,6 +329,7 @@ export type PayableItem = {
     annual_rate_bps: number;
     disallowance_risk_paise: number;
     fy_end: string;
+    statute: StatuteCitation;
   };
 };
 

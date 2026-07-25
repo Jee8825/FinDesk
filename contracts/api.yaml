@@ -135,7 +135,7 @@ paths:
     parameters: [{ name: party_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [books], summary: "Verify a vendor's Udyam URN (fixture register today) — verified category then scopes §15/43B(h); tag kept alongside, disagreement = drift alert", responses: { "200": { description: verification } } }
   /payables/compliance:
-    get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, 43B(h) disallowance exposure per open bill", responses: { "200": { description: compliance } } }
+    get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, MSME disallowance exposure per open bill; each bill's clock carries `statute`, the citation for THAT bill's tax year (§43B(h) ITA-1961 through FY 2025-26, §37(2)(g) ITA-2025 from 1 Apr 2026)", responses: { "200": { description: compliance } } }
   /payables/plan:
     get: { tags: [cash], summary: "Deduction Defense — deterministic ranked pay-first plan (closing windows by deadline, breached by daily §16 bleed), cash-aware via latest forecast", responses: { "200": { description: plan } } }
   /leaks:

@@ -231,3 +231,71 @@ def ims_clock_snapshot(
         "itc_at_risk_paise": tax_paise if days_remaining >= 0 else 0,
         "itc_deemed_paise": tax_paise if days_remaining < 0 else 0,
     }
+
+
+# --------------------------------------------------------------------------
+# Which statute governs an MSME payment disallowance, and when
+# --------------------------------------------------------------------------
+# The Income-tax Act 2025 is in force from 1 April 2026. The MSME
+# actual-payment disallowance that was **section 43B(h)** of the 1961 Act is
+# re-enacted as **section 37(2)(g)** of the 2025 Act. The substance is unchanged
+# — payment beyond the MSMED Act §15 window defers the deduction to the year of
+# payment — but the citation is not, and a citation is the whole point of
+# showing a section number to a CA.
+#
+# This is NOT a rename. Section 536 of the 2025 Act preserves the earlier Act
+# for pre-cutover years, so BOTH are live right now:
+#
+#   * FY 2025-26 (year ended 31 Mar 2026) → 1961 Act, §43B(h). This is the year
+#     under audit until the 30 September 2026 tax-audit deadline, and the MSME
+#     disallowance is the line item most likely to move the tax number.
+#   * Tax Year 2026-27 onward (from 1 Apr 2026) → 2025 Act, §37(2)(g).
+#
+# So the correct behaviour is to cite by the year the bill belongs to. Citing
+# one section for everything is wrong in one direction or the other.
+#
+# NO LLM TOUCHES THIS MODULE.
+
+ITA_2025_EFFECTIVE_FROM = datetime(2026, 4, 1, tzinfo=UTC)
+# Indian financial year starts 1 April.
+FY_START_MONTH = 4
+
+
+def tax_year_of(as_of: datetime) -> str:
+    """Indian tax year label for a date: '2026-27'."""
+    start = as_of.year if as_of.month >= FY_START_MONTH else as_of.year - 1
+    return f"{start}-{str(start + 1)[-2:]}"
+
+
+def msme_disallowance_citation(as_of: datetime) -> dict[str, str]:
+    """The statute to cite for an MSE bill falling in ``as_of``'s tax year.
+
+    Returns both the governing citation and the other one, because during the
+    transition a CA is working two years at once and a bare section number with
+    no act attached is ambiguous.
+    """
+    if as_of >= ITA_2025_EFFECTIVE_FROM:
+        return {
+            "section": "37(2)(g)",
+            "label": "§37(2)(g)",
+            "act": "Income-tax Act 2025",
+            "tax_year": tax_year_of(as_of),
+            "predecessor": "§43B(h) (Income-tax Act 1961)",
+            "note": (
+                "The Income-tax Act 2025 applies from 1 Apr 2026; the MSME "
+                "disallowance formerly at §43B(h) is re-enacted at §37(2)(g). "
+                "FY 2025-26 is still cited under §43B(h)."
+            ),
+        }
+    return {
+        "section": "43B(h)",
+        "label": "§43B(h)",
+        "act": "Income-tax Act 1961",
+        "tax_year": tax_year_of(as_of),
+        "predecessor": "",
+        "note": (
+            "FY 2025-26 and earlier remain under the Income-tax Act 1961 "
+            "(§536 saving clause); §37(2)(g) of the 2025 Act applies from "
+            "1 Apr 2026."
+        ),
+    }

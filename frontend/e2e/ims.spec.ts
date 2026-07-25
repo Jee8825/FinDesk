@@ -50,6 +50,12 @@ test("command palette reaches the ims shield", async ({ page }) => {
   const input = page.getByPlaceholder(/Jump to a page/);
   await expect(input).toBeVisible();
   await input.fill("ims");
+  // cmdk filters and selects asynchronously — pressing Enter in the same tick
+  // occasionally lands with nothing selected under full-suite load. Wait for the
+  // option to exist before acting on it.
+  await expect(page.getByRole("option", { name: /IMS/ }).first()).toBeVisible({
+    timeout: 10_000,
+  });
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/ims/);
   await expect(page.getByRole("heading", { name: "IMS · ITC Shield" })).toBeVisible();

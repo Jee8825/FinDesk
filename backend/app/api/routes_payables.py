@@ -17,7 +17,7 @@ from app.auth.deps import Auth
 from app.config import get_settings
 from app.db import session_scope
 from app.db.models import Forecast
-from app.services.payables import CA_NOTE, defense_plan, gather_items, totals
+from app.services.payables import ca_note, defense_plan, gather_items, totals
 
 router = APIRouter(tags=["cash"])
 
@@ -64,7 +64,7 @@ async def payables_compliance(auth: Auth) -> PayablesOut:
         totals=totals(rows, amounts),
         non_mse_open_count=non_mse,
         drift_alerts=drift,
-        ca_note=CA_NOTE,
+        ca_note=ca_note(now),
     )
 
 
@@ -86,4 +86,4 @@ async def payables_plan(auth: Auth) -> PlanOut:
         [i for i in items if i["clock"]["band"] in {"closing", "breached"}],
         cash_available_paise=latest.opening_balance_paise if latest else None,
     )
-    return PlanOut(**plan, ca_note=CA_NOTE)
+    return PlanOut(**plan, ca_note=ca_note(now))

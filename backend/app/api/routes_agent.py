@@ -21,9 +21,17 @@ from app.events.streams import enqueue_job, get_redis, subscribe_run
 
 router = APIRouter(tags=["agent"])
 
-# a healthy worker re-polls the stream every 2s (xreadgroup block=2000);
-# 30s of consumer idle means it is gone or wedged
-WORKER_IDLE_THRESHOLD_MS = 30_000
+# A healthy worker re-polls the stream every 2s (xreadgroup block=2000), so
+# prolonged consumer idle means it is gone or wedged.
+#
+# But idle measures time since the last POLL, not liveness: a worker inside a
+# long graph is not polling at all, so a slow run makes a perfectly healthy
+# worker read as offline. subscription_scan takes ~30s (two LLM providers plus a
+# memory query per vendor) and sat exactly on the old 30s threshold, which is how
+# this surfaced. Two changes: a wider idle window, and — the actual fix —
+# in-flight work counts as alive, because a consumer holding pending entries is
+# by definition processing them.
+WORKER_IDLE_THRESHOLD_MS = 90_000
 
 # grows as graphs land (docs/architecture/01 §2)
 KNOWN_GRAPHS = {
@@ -89,7 +97,11 @@ async def agent_health(auth: Auth) -> dict[str, bool]:
         consumers = await get_redis().xinfo_consumers(
             settings.jobs_stream_interactive, settings.jobs_consumer_group
         )
-        worker = any(int(c.get("idle", 1 << 62)) < WORKER_IDLE_THRESHOLD_MS for c in consumers)
+        worker = any(
+            int(c.get("idle", 1 << 62)) < WORKER_IDLE_THRESHOLD_MS
+            or int(c.get("pending", 0)) > 0  # busy on a long graph, not gone
+            for c in consumers
+        )
     except Exception:  # noqa: BLE001 — stream/group missing or redis down = not live
         worker = False
     return {"worker": worker, "memory": await memoryclient.ping()}

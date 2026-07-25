@@ -180,16 +180,25 @@ export default function PayablesPage() {
   const payables = useQuery({ queryKey: ["payables"], queryFn: () => api.payables() });
   const p = payables.data;
 
+  // The section number is SERVER-derived per tax year — §43B(h) under the ITA
+  // 1961 through FY 2025-26, §37(2)(g) under the ITA 2025 from 1 Apr 2026 — so
+  // it is never hardcoded here. Falls back to a neutral phrase before data
+  // arrives rather than briefly showing the wrong citation.
+  const statute = p?.items?.[0]?.clock?.statute;
+  const statuteLabel = statute?.label ?? "MSME disallowance";
+  const statuteAct = statute?.act ?? "";
+
   return (
     <PageShell
       title="Payables Shield"
       surface="dark"
-      subtitle="§15 clock and 43B(h) tax exposure on bills owed to MSE vendors"
+      subtitle={`§15 clock and ${statuteLabel} tax exposure on bills owed to MSE vendors`}
       annotation="GET /payables/compliance · deterministic clock engine"
     >
       <p className="mono-annot mb-5">
         ◇ same statutory engine as the radar, pointed at what we owe · pay inside 45 days or the
-        expense deduction defers (income-tax §43B(h))
+        expense deduction defers (income-tax {statuteLabel}
+        {statuteAct ? `, ${statuteAct}` : ""})
       </p>
 
       {payables.isLoading && (
@@ -218,7 +227,7 @@ export default function PayablesPage() {
               format={formatINRCompact}
             />
             <StatCard
-              label="43B(h) at risk"
+              label={`${statuteLabel} at risk`}
               value={p.totals.disallowance_risk_paise}
               format={formatINRCompact}
               tone="bad"
@@ -286,7 +295,7 @@ export default function PayablesPage() {
                       interest owed
                     </th>
                     <th className="mono-label px-5 py-3 text-right font-normal text-dark-mute">
-                      43B(h) at risk
+                      {statuteLabel} at risk
                     </th>
                     <th className="mono-label px-5 py-3 font-normal text-dark-mute">band</th>
                   </tr>
