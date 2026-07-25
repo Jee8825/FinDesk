@@ -1,0 +1,38 @@
+# Single-service image for Render's FREE tier: API + agents worker in one
+# container.
+#
+# Render background workers are a PAID service ($7/mo), so a free-tier deploy
+# with a separate worker is impossible — and without a worker every agent run
+# sits at "queued" forever, which is the whole product. This image runs both
+# processes side by side so one free web service does the job.
+#
+# It deliberately does NOT create a code dependency from backend on agents: both
+# packages are installed independently and started as separate processes. The
+# worker still talks to the API over the internal HTTP API exactly as it does in
+# a split deployment, so nothing about the architecture changes — only where the
+# processes live.
+#
+# For anything past a demo, use backend/Dockerfile + agents/Dockerfile as two
+# Render services instead: separate scaling, separate restarts, and a worker
+# crash cannot take the API down with it.
+
+FROM python:3.11-slim
+
+WORKDIR /srv
+COPY shared/py /srv/shared/py
+COPY tools /srv/tools
+COPY prompts /srv/prompts
+COPY agents/pyproject.toml /srv/agents/pyproject.toml
+COPY agents/findesk_agents /srv/agents/findesk_agents
+COPY backend/pyproject.toml /srv/backend/pyproject.toml
+COPY backend/app /srv/backend/app
+COPY backend/alembic.ini /srv/backend/alembic.ini
+
+RUN pip install --no-cache-dir \
+      /srv/shared/py /srv/tools /srv/agents /srv/backend
+
+COPY infra/render-entrypoint.sh /srv/entrypoint.sh
+RUN chmod +x /srv/entrypoint.sh
+
+EXPOSE 8080
+CMD ["/srv/entrypoint.sh"]

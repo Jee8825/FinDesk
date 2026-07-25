@@ -1,109 +1,85 @@
-# Render Blueprint — FinDesk / LeakRadar backend plane.
+# Render Blueprint — FinDesk / LeakRadar, tuned for the FREE tier.
 #
-# Provisions Postgres, Redis, the FastAPI API, and the agents worker. The
-# frontend is NOT here: it goes to Vercel, which proxies /api/v1/* to the API
-# service via next.config.mjs rewrites (same-origin, so no CORS).
+# ONE web service runs both the API and the agents worker (infra/Dockerfile.render).
+# That is not a shortcut for its own sake: Render background workers are a PAID
+# service, so on the free tier a separate worker cannot exist — and without a
+# worker every agent run sits at "queued" forever, which is the entire product.
 #
-# What is deliberately NOT provisioned: the Recall memory engine. It needs
-# Postgres+pgvector, Neo4j and its own Redis, and Neo4j has no managed Render
-# offering. Every caller degrades without it — and since the usage-confirmation
-# answer is authoritative on the subscriptions row (served by
-# /internal/leaks/context), LeakRadar's loop works with Recall absent. Add it
-# later as its own service group plus Neo4j Aura if you want decay and
-# conflict detection.
+# The free tier also gives 750 instance-hours/month. A single always-on service
+# uses ~730, so ONE service can stay awake round the clock; two cannot.
+#
+# The frontend is not here — it goes to Vercel and proxies /api/v1/* to this
+# service via next.config.mjs rewrites, so everything is same-origin with no CORS.
+#
+# Moving past a demo: swap to backend/Dockerfile + agents/Dockerfile as two
+# services (a `type: worker` entry on a paid plan). Separate scaling, separate
+# restarts, and a worker crash can no longer take the API down with it.
 #
 # Deploy: Render Dashboard → New → Blueprint → point at this repo.
-# Secrets marked `sync: false` are entered once in the dashboard and never live
-# in git.
+# See DEPLOY.md for the full walkthrough, including UptimeRobot.
 
 databases:
   - name: findesk-postgres
     databaseName: findesk
     user: findesk
-    plan: free          # free Postgres expires after 30 days — see DEPLOY.md
+    plan: free          # NOTE: free Postgres is deleted after 30 days
     postgresMajorVersion: "16"
 
 services:
-  # ---------------------------------------------------------------- cache/bus
   - type: keyvalue
     name: findesk-redis
     plan: free
-    ipAllowList: []     # private network only
-    maxmemoryPolicy: noeviction   # job streams must NOT be evicted under pressure
+    ipAllowList: []               # private network only
+    maxmemoryPolicy: noeviction   # job streams must not be evicted under pressure
 
-  # ------------------------------------------------------------------ the API
   - type: web
     name: findesk-api
     runtime: docker
     plan: free
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: .    # Dockerfile COPYs shared/py, so context is the repo root
+    dockerfilePath: ./infra/Dockerfile.render
+    dockerContext: .    # the image COPYs shared/, tools/, agents/ and backend/
     healthCheckPath: /healthz
     autoDeployTrigger: commit
-    # KEEP THIS AT 1. The API consumes the agents:events Redis stream through a
-    # single consumer group to persist run steps, so a second replica splits the
-    # stream and each instance records only the events it happened to receive —
-    # the Run Viewer then shows steps stuck at "started". Verified: two backends
-    # against one stream lose ~2 of 9 steps per run; one backend records all 9.
-    # Scaling out needs a per-replica consumer name first.
+    # KEEP AT 1. The API persists agent run steps by consuming the agents:events
+    # Redis stream through a single consumer group, so a second replica splits
+    # the stream and each instance records only what it happened to receive —
+    # the Run Viewer then shows steps stuck at "started". Measured: two backends
+    # lost 2 of 9 steps on a scan; one recorded all 9. Scaling out needs a
+    # per-replica consumer name first. (Free tier is single-instance anyway.)
     numInstances: 1
     envVars:
       - key: APP_ENV
         value: prod
-      # asyncpg driver — Render's connectionString is the psycopg form
       - key: APP_DATABASE_URL
         fromDatabase:
           name: findesk-postgres
-          property: connectionString
+          property: connectionString   # plain URL; settings add the +asyncpg driver
       - key: APP_REDIS_URL
         fromService:
           name: findesk-redis
           type: keyvalue
           property: connectionString
-      # shared secret the worker uses on /internal/* — generated once, then
-      # copied into the worker service below
-      - key: INTERNAL_API_TOKEN
-        generateValue: true
+      # The worker runs in this same container and calls the API over loopback.
+      - key: BACKEND_BASE_URL
+        value: http://localhost:8080
       - key: JWT_SECRET
+        generateValue: true
+      - key: INTERNAL_API_TOKEN
         generateValue: true
       - key: ACCESS_TOKEN_TTL_SECONDS
         value: "900"
       - key: REFRESH_TOKEN_TTL_DAYS
         value: "14"
-      # Recall is optional (see header). Leave unset and memory calls no-op.
-      - key: RECALL_BASE_URL
-        sync: false
       - key: STATUTORY_BANK_RATE_BPS
         value: "675"
-
-  # -------------------------------------------------------------- agent worker
-  - type: worker
-    name: findesk-worker
-    runtime: docker
-    plan: free
-    dockerfilePath: ./agents/Dockerfile
-    dockerContext: .
-    autoDeployTrigger: commit
-    envVars:
-      - key: APP_REDIS_URL
-        fromService:
-          name: findesk-redis
-          type: keyvalue
-          property: connectionString
-      - key: BACKEND_BASE_URL
-        fromService:
-          name: findesk-api
-          type: web
-          property: hostport
-      # MUST match findesk-api's generated value — Render cannot copy a
-      # generateValue across services, so paste it in the dashboard once.
-      - key: INTERNAL_API_TOKEN
-        sync: false
-      - key: RECALL_BASE_URL
-        sync: false
-      # LLM providers. Absent keys are valid: every graph degrades to its
-      # deterministic path, losing vendor renaming, narratives and drafts only.
+      # Optional. No key = deterministic-only: vendor names fall back to the
+      # slug, narratives and drafts are simply absent, every number is unchanged.
       - key: GROQ_API_KEY
         sync: false
       - key: OPENROUTER_API_KEY
+        sync: false
+      # Optional. Leave blank unless you deploy Recall (DEPLOY.md §7) — the
+      # usage-confirmation answer lives on the subscriptions row, so LeakRadar's
+      # loop works without a memory engine.
+      - key: RECALL_BASE_URL
         sync: false
