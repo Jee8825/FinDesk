@@ -19,12 +19,20 @@ node_modules/
 .next/
 out/
 coverage/
+*.tsbuildinfo
+
+# playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/e2e/.auth/
 
 # machine-specific
 docker-compose.override.yml
 .DS_Store
 .idea/
 .vscode/
+.obsidian/
+.claude/settings.local.json
 
 # data
 *.local.db
@@ -32,3 +40,9 @@ docker-compose.override.yml
 # runtime data (dev uploads etc.)
 var/
 evals_out/
+
+# memory & context layer — generated artifacts (vault notes + CLAUDE.md stay tracked)
+graphify-out/
+.basic-memory/
+knowledge/.obsidian/
+.env.vm

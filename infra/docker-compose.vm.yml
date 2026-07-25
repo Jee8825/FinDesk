@@ -1,0 +1,184 @@
+# Full stack on ONE VM — nothing omitted, including the Recall memory engine.
+#
+# This is the "no compromise" deployment: app plane + memory plane + frontend on
+# a single always-free (or cheap) box. Per-service PaaS free tiers cannot hold
+# this — Neo4j alone rules out every 1 GB free container plan — but one VM has
+# no per-service caps, no cold starts, and no request-count limits.
+#
+#   docker compose -f infra/docker-compose.vm.yml up -d --build
+#
+# Measured: 937 MiB across all 8 containers, running together and idle
+# (Neo4j 511, api 132, recall-api 106, shim 95, the rest under 40 each).
+# Budget 2 GB minimum, 4 GB comfortable. Memory caps below keep a 2 GB box alive
+# under load rather than letting the OOM killer pick a victim at random.
+#
+# Sizing that works:
+#   Oracle Always Free  2 OCPU / 12 GB ARM  — free forever, huge headroom
+#   AWS t4g.small        2 vCPU /  2 GB ARM — tight but runs; ~$12/mo on credits
+#   AWS t4g.medium       2 vCPU /  4 GB ARM — comfortable; ~$24/mo on credits
+#   AWS t3.micro         2 vCPU /  1 GB     — DOES NOT FIT (Neo4j is 614 MB idle)
+#
+# See DEPLOY-VM.md for the full walkthrough.
+
+name: findesk-full
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ------------------------------------------------------------- app plane
+  app-postgres:
+    <<: *restart
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: findesk
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env.vm}
+      POSTGRES_DB: findesk
+    volumes: [app_pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U findesk"]
+      interval: 5s
+      retries: 20
+    deploy: { resources: { limits: { memory: 256M } } }
+
+  app-redis:
+    <<: *restart
+    image: redis:7-alpine
+    # job streams must survive pressure — evicting one loses an agent run
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    deploy: { resources: { limits: { memory: 128M } } }
+
+  api:
+    <<: *restart
+    build: { context: .., dockerfile: infra/Dockerfile.render }
+    environment:
+      APP_ENV: prod
+      APP_DATABASE_URL: postgresql://findesk:${APP_DB_PASSWORD}@app-postgres:5432/findesk
+      APP_REDIS_URL: redis://app-redis:6379/0
+      BACKEND_BASE_URL: http://localhost:8080
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (32+ chars) in .env.vm}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?set INTERNAL_API_TOKEN (32+ chars) in .env.vm}
+      # the whole point of this file: the memory engine is wired in
+      RECALL_BASE_URL: http://recall-api:8000
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      PORT: "8080"
+    depends_on:
+      app-postgres: { condition: service_healthy }
+      app-redis: { condition: service_healthy }
+    deploy: { resources: { limits: { memory: 512M } } }
+
+  # ---------------------------------------------------------- memory plane
+  recall-postgres:
+    <<: *restart
+    # pgvector, not plain postgres — Recall stores embeddings
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: recall
+      POSTGRES_PASSWORD: ${RECALL_DB_PASSWORD:?set RECALL_DB_PASSWORD in .env.vm}
+      POSTGRES_DB: recall
+    volumes: [recall_pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recall"]
+      interval: 5s
+      retries: 20
+    deploy: { resources: { limits: { memory: 256M } } }
+
+  recall-redis:
+    <<: *restart
+    image: redis:7-alpine
+    command: ["redis-server", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    deploy: { resources: { limits: { memory: 96M } } }
+
+  recall-neo4j:
+    <<: *restart
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD (8+ chars) in .env.vm}
+      # Defaults size the heap off host RAM, which on a 2 GB box means Neo4j
+      # claims most of it and everything else OOMs. Pinned small on purpose:
+      # this graph holds memory provenance, not a production dataset.
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 384m
+      NEO4J_server_memory_pagecache_size: 128m
+    volumes: [neo4j_data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null || exit 1"]
+      interval: 10s
+      retries: 30
+      start_period: 40s
+    deploy: { resources: { limits: { memory: 900M } } }
+
+  embedding-shim:
+    <<: *restart
+    # its own image: the Recall backend image has neither model2vec nor the
+    # shim script, and its ENTRYPOINT runs Recall's migrations
+    build: { context: .., dockerfile: infra/Dockerfile.shim }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8090/health')\""]
+      interval: 10s
+      retries: 20
+      start_period: 30s
+    deploy: { resources: { limits: { memory: 384M } } }
+
+  recall-api:
+    <<: *restart
+    build: { context: ../memory, dockerfile: ../memory/infra/Dockerfile.backend }
+    environment:
+      RECALL_POSTGRES_DSN: postgresql+asyncpg://recall:${RECALL_DB_PASSWORD}@recall-postgres:5432/recall
+      RECALL_NEO4J_URI: bolt://recall-neo4j:7687
+      RECALL_NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      RECALL_REDIS_URL: redis://recall-redis:6379/0
+      # local embeddings + a deterministic chat stub; no external AI key needed
+      RECALL_LOCAL_BASE_URL: http://embedding-shim:8090/v1
+      RECALL_LLM_PROVIDER: local
+      RECALL_EMBEDDING_PROVIDER: local
+      # MUST match the shim's model: potion-base-8M emits 256 dims, while the
+      # default 1024 is sized for qwen's text-embedding-v3. A mismatch is not a
+      # config warning — the pgvector column is created at that width and every
+      # ingest fails with "expected 1024 dimensions, not 256" AFTER the stack
+      # looks healthy.
+      RECALL_EMBEDDING_DIM: "256"
+    volumes:
+      # The Recall image build omits prompts/, but recall.core.prompts resolves
+      # /app/prompts at request time — so ingest 500s with "prompt template not
+      # found" long after the container reports healthy. Same read-only mount the
+      # dev compose uses. Mounting rather than patching keeps memory/ vendored.
+      - ../memory/prompts:/app/prompts:ro
+    depends_on:
+      recall-postgres: { condition: service_healthy }
+      recall-redis: { condition: service_healthy }
+      recall-neo4j: { condition: service_healthy }
+      embedding-shim: { condition: service_healthy }
+    deploy: { resources: { limits: { memory: 384M } } }
+
+  # --------------------------------------------------------------- edge
+  # Only this port is published. Everything else talks over the private compose
+  # network, so Postgres/Neo4j/Redis are never exposed to the internet.
+  caddy:
+    <<: *restart
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    deploy: { resources: { limits: { memory: 96M } } }
+
+volumes:
+  app_pg:
+  recall_pg:
+  neo4j_data:
+  caddy_data:
+  caddy_config:

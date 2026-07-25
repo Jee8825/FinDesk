@@ -44,3 +44,36 @@ async def write_audit(
     )
     await repo.add_audit(entry)
     return entry
+
+
+async def verify_chain(session: AsyncSession, tenant_id: str) -> dict[str, Any]:
+    """Walk the tenant's audit chain and recompute every link. Deterministic.
+
+    Returns {valid, entries, head_hash, broken_at?}: a broken link names the
+    first row whose recomputed hash (or prev linkage) disagrees with what is
+    stored — tamper-evidence a lender or CA can check live, not a promise.
+    """
+    from sqlalchemy import select
+
+    rows = list(
+        await session.scalars(
+            select(AuditLog)
+            .where(AuditLog.tenant_id == tenant_id)
+            .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        )
+    )
+    prev = "genesis"
+    for index, row in enumerate(rows):
+        body = _canonical(
+            {"actor": row.actor, "action": row.action, "entity_ref": row.entity_ref, **row.payload}
+        )
+        expected = hashlib.sha256(f"{prev}|{body}".encode()).hexdigest()
+        if row.prev_hash != prev or row.row_hash != expected:
+            return {
+                "valid": False,
+                "entries": len(rows),
+                "broken_at": {"index": index, "id": row.id, "action": row.action},
+                "head_hash": rows[-1].row_hash if rows else "genesis",
+            }
+        prev = row.row_hash
+    return {"valid": True, "entries": len(rows), "head_hash": prev}

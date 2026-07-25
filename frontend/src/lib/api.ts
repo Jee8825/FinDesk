@@ -12,12 +12,23 @@ export type TokenPair = {
   role: string;
 };
 
+export type RunStep = {
+  step_id: string;
+  name: string;
+  status: string;
+  detail?: Record<string, unknown>;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+};
+
 export type RunOut = {
   run_id: string;
   graph: string;
   status: string;
   params: Record<string, unknown>;
-  steps?: { step_id: string; name: string; status: string }[];
+  created_at?: string | null;
+  steps?: RunStep[];
 };
 
 export function getToken(): string | null {
@@ -35,18 +46,74 @@ export function clearTokens() {
   window.localStorage.removeItem(REFRESH_KEY);
 }
 
+let refreshing: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  // Single-flight: concurrent 401s share one refresh call.
+  refreshing ??= (async () => {
+    const refresh = typeof window === "undefined" ? null : window.localStorage.getItem(REFRESH_KEY);
+    if (!refresh) return false;
+    const res = await fetch(`${API_PREFIX}${apiPaths.POST_AUTH_REFRESH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+    if (!res.ok) return false;
+    setTokens((await res.json()) as TokenPair);
+    return true;
+  })().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+/** Fetch with Bearer auth and a single-flight refresh→retry on 401.
+ *  `url` is the full same-origin URL (API_PREFIX included). Every call that
+ *  talks to the API — JSON, multipart uploads, the SSE stream — goes through
+ *  here so token expiry never strands a request. */
+export async function authorizedFetch(
+  url: string,
+  init: RequestInit = {},
+  retried = false,
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers });
+  if (res.status === 401 && !retried && url !== `${API_PREFIX}${apiPaths.POST_AUTH_LOGIN}`) {
+    if (await tryRefresh()) return authorizedFetch(url, init, true);
+    clearTokens();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
+  return res;
+}
+
+/** Typed API failure: pages can branch on status (403 vs 422 vs 500)
+ *  instead of string-matching a message. message stays human-readable. */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+  ) {
+    super(detail);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_PREFIX}${path}`, {
+  const res = await authorizedFetch(`${API_PREFIX}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-    },
+    headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => ({}));
-    throw new Error(detail.detail ?? `${method} ${path} → ${res.status}`);
+    const payload = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      typeof payload.detail === "string" ? payload.detail : `${method} ${path} → ${res.status}`,
+    );
   }
   return res.json() as Promise<T>;
 }
@@ -69,6 +136,27 @@ export type TxnPage = {
 
 export type ChartAccount = { code: string; name: string; type: string };
 
+// Compact Indian notation for hero figures: ₹86.4L / ₹2.3Cr / ₹12,300
+export function formatINRCompact(amountPaise: number): string {
+  const rupees = amountPaise / 100;
+  const abs = Math.abs(rupees);
+  const sign = rupees < 0 ? "−" : "";
+  if (abs >= 1e7) return `${sign}₹${(abs / 1e7).toFixed(1)}Cr`;
+  if (abs >= 1e5) return `${sign}₹${(abs / 1e5).toFixed(1)}L`;
+  if (abs >= 1e3) return `${sign}₹${(abs / 1e3).toFixed(1)}k`;
+  return `${sign}₹${Math.round(abs).toLocaleString("en-IN")}`;
+}
+
+// FE5: "IST at the edge" for real — en-IN locale alone renders in the
+// BROWSER's timezone; every timestamp display goes through these.
+export function formatIST(d: string | number | Date): string {
+  return new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
+export function formatISTDate(d: string | number | Date): string {
+  return new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
 export function formatINR(amountPaise: number): string {
   const rupees = amountPaise / 100;
   return new Intl.NumberFormat("en-IN", {
@@ -77,6 +165,18 @@ export function formatINR(amountPaise: number): string {
     minimumFractionDigits: 2,
   }).format(rupees);
 }
+
+/** Which statute to cite for an MSME disallowance figure. Server-derived from
+ *  the bill's own tax year — §43B(h) (ITA 1961) through FY 2025-26, §37(2)(g)
+ *  (ITA 2025) from 1 Apr 2026. Never hardcode a section number in the UI. */
+export type StatuteCitation = {
+  section: string;
+  label: string;
+  act: string;
+  tax_year: string;
+  predecessor: string;
+  note: string;
+};
 
 export type Approval = {
   id: string;
@@ -175,6 +275,14 @@ export type WhyEvent = {
   row_hash: string;
 };
 
+export type MemoryBelief = {
+  memory_id: string;
+  scope_key: string;
+  content: string;
+  confidence: number | null;
+  explanation: string;
+};
+
 export type RadarItem = {
   invoice_id: string;
   invoice_number: string;
@@ -190,11 +298,75 @@ export type RadarItem = {
   predicted_payment_date: string | null;
   avg_days_late: number | null;
   behavior_observations: number;
+  open_promise_date: string | null;
+  promises_kept: number;
+  promises_broken: number;
 };
 
 export type RadarOut = {
   items: RadarItem[];
   totals: { overdue_paise: number; accrued_interest_paise: number };
+  ca_note: string;
+};
+
+export type PayableItem = {
+  bill_id: string;
+  bill_number: string;
+  counterparty_id: string;
+  vendor: string;
+  msme_status: string;
+  msme_source: "verified" | "self_declared";
+  verified_category: string | null;
+  amount_paise: number;
+  outstanding_paise: number;
+  clock: {
+    statutory_due_date: string;
+    day_count: number;
+    days_left: number;
+    overdue_days: number;
+    band: "within" | "closing" | "breached";
+    interest_owed_paise: number;
+    annual_rate_bps: number;
+    disallowance_risk_paise: number;
+    fy_end: string;
+    statute: StatuteCitation;
+  };
+};
+
+export type PayablesOut = {
+  items: PayableItem[];
+  drift_alerts: {
+    vendor: string;
+    self_declared: string;
+    verified: string | null;
+    effect: string;
+  }[];
+  totals: {
+    open_mse_paise: number;
+    breached_paise: number;
+    closing_window_paise: number;
+    interest_owed_paise: number;
+    disallowance_risk_paise: number;
+  };
+  non_mse_open_count: number;
+  ca_note: string;
+};
+
+export type PlanItem = {
+  bill_number: string;
+  vendor: string;
+  outstanding_paise: number;
+  band: "closing" | "breached";
+  action_by: string;
+  why: string;
+  daily_bleed_paise: number;
+  affordable_now: boolean;
+};
+
+export type PlanOut = {
+  items: PlanItem[];
+  totals: { planned_paise: number; deduction_protected_paise: number; daily_bleed_paise: number };
+  cash_basis_paise: number | null;
   ca_note: string;
 };
 
@@ -204,7 +376,16 @@ export type ForecastWeek = {
   inflow_paise: number;
   outflow_paise: number;
   closing_paise: number;
-  drivers: { invoice_number: string; client: string; amount_paise: number; expected: string }[];
+  drivers: {
+    // kind absent = inflow (invoice); "out" = dated vendor bill leaving
+    kind?: "out";
+    invoice_number?: string;
+    client?: string;
+    bill_number?: string;
+    vendor?: string;
+    amount_paise: number;
+    expected: string;
+  }[];
 };
 
 export type ForecastOut = {
@@ -223,6 +404,15 @@ export type ForecastOut = {
   } | null;
   narrative: string[];
   scenarios: Record<string, ForecastWeek[]>;
+};
+
+export type WhatifOut = {
+  forecast_id: string;
+  params: Record<string, number>;
+  weeks: ForecastWeek[];
+  gap: { scenario: string; week: number; week_start: string; shortfall_paise: number } | null;
+  pushed_out_paise: number;
+  end_delta_paise: number;
 };
 
 export type WcAction = {
@@ -255,9 +445,162 @@ export type DataRoom = {
   shared?: { read_only: boolean; expires_at: number };
 };
 
+export type ImsRecordItem = {
+  id: string;
+  supplier_gstin: string;
+  supplier_name: string;
+  doc_type: string;
+  doc_number: string;
+  doc_date: string;
+  period: string;
+  taxable_value_paise: number;
+  tax_paise: number;
+  total_paise: number;
+  state: string;
+  match_tier: string | null;
+  matched_bill_number: string | null;
+  recommendation: string | null;
+  note: string | null;
+  // deemed-acceptance clock — pending rows only; decided rows have no deadline
+  deemed_accept_at: string | null;
+  days_remaining: number | null;
+  urgency: ImsUrgency | null;
+};
+
+/** Bands are fixed in backend/app/services/statutory.py — never derive them here. */
+export type ImsUrgency = "safe" | "due_soon" | "urgent" | "lapsed";
+
+export type ImsClock = {
+  filing_frequency: string;
+  next_deadline: string | null;
+  days_remaining: number | null;
+  urgency: ImsUrgency;
+  itc_at_risk_paise: number;
+  itc_lapsed_paise: number;
+  lapsing_soon_paise: number;
+  lapsed_count: number;
+};
+
+export type ImsQueueOut = {
+  records: ImsRecordItem[];
+  totals: {
+    pending_count: number;
+    itc_at_stake_paise: number;
+    review_count: number;
+    accept_ready_paise: number;
+    accepted_tax_paise: number;
+    rejected_tax_paise: number;
+  };
+  clock: ImsClock;
+  ca_note: string;
+};
+
+
+// ---------------------------------------------------------------- LeakRadar
+
+/** Bands are decided in agents/.../recurrence.py — never derived client-side. */
+export type LeakCadence =
+  | "weekly"
+  | "fortnightly"
+  | "monthly"
+  | "quarterly"
+  | "annual"
+  | "irregular";
+
+export type LeakRow = {
+  id: string;
+  vendor_slug: string;
+  vendor_label: string;
+  category_code: string | null;
+  cadence: LeakCadence;
+  period_days: number;
+  periods_per_year: number | null;
+  occurrences: number;
+  confidence: number;
+  first_seen: string;
+  last_seen: string;
+  next_expected: string;
+  status: "active" | "stopped";
+  amount_paise: number;
+  latest_amount_paise: number;
+  run_rate_paise: number;
+  drift_kind: string | null;
+  drift_paise_per_year: number;
+  duplicate_paise: number;
+  leak_score: number;
+  score_components: Record<string, number>;
+  recoverable_paise_per_year: number;
+  reason: string;
+  recommended_action: string;
+  narrative: string | null;
+  usage: "in_use" | "unused" | null;
+  usage_confirmed_at: string | null;
+  has_draft: boolean;
+};
+
+export type LeakTotals = {
+  subscriptions: number;
+  stopped: number;
+  committed_paise_per_year: number;
+  /** subscription spend only — commitments are reported separately so they
+   *  cannot flatten the category chart */
+  subscription_paise_per_year: number;
+  commitments_paise_per_year: number;
+  recoverable_paise_per_year: number;
+  drift_paise_per_year: number;
+  leaking_count: number;
+  unreviewed_count: number;
+  by_category_paise: Record<string, number>;
+};
+
+export type LeakListOut = {
+  rows: LeakRow[];
+  totals: LeakTotals;
+  mode: "business" | "personal";
+  note: string;
+};
+
+export type ImsSyncOut = {
+  period: string;
+  pulled: number;
+  created: number;
+  refreshed: number;
+  skipped_decided: number;
+  recommended_accept: number;
+  needs_review: number;
+};
+
+export type CloseCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  severity: "block" | "warn";
+  value: string;
+  href: string;
+};
+
+export type CloseChecklistOut = {
+  period: string;
+  generated_at: string;
+  checks: CloseCheck[];
+  blockers: string[];
+  warnings: string[];
+  ready: boolean;
+  audit_head: string | null;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>("POST", apiPaths.POST_AUTH_LOGIN, { email, password }),
+  logout: () => {
+    // best-effort server-side revocation; local clear happens regardless
+    const refresh =
+      typeof window === "undefined" ? null : window.localStorage.getItem(REFRESH_KEY);
+    if (!refresh) return Promise.resolve({ ok: true });
+    return request<{ ok: boolean }>("POST", apiPaths.POST_AUTH_LOGOUT, {
+      refresh_token: refresh,
+    }).catch(() => ({ ok: true }));
+  },
   dataroom: () => request<DataRoom>("GET", apiPaths.GET_DATAROOM),
   shareDataroom: () =>
     request<{ share_token: string; expires_in_days: number }>(
@@ -273,21 +616,78 @@ export const api = {
       apiPaths.POST_WC_ACTIONS_ACTION_ID_REQUEST.replace("{action_id}", id),
     ),
   forecast: () => request<ForecastOut>("GET", apiPaths.GET_FORECAST),
+  whatif: (params: {
+    collection_delay_days?: number;
+    inflow_haircut_bps?: number;
+    extra_monthly_outflow_paise?: number;
+  }) => request<WhatifOut>("POST", apiPaths.POST_FORECAST_WHATIF, params),
   radar: () => request<RadarOut>("GET", apiPaths.GET_RECEIVABLES_RADAR),
+  logPromise: (invoiceId: string, promisedDate: string, amountPaise?: number) =>
+    request<{ ok: boolean; promise_id: string }>(
+      "POST",
+      apiPaths.POST_RECEIVABLES_INVOICE_ID_PROMISE.replace("{invoice_id}", invoiceId),
+      { promised_date: promisedDate, amount_paise: amountPaise },
+    ),
+  payables: () => request<PayablesOut>("GET", apiPaths.GET_PAYABLES_COMPLIANCE),
+  verifyMsme: (partyId: string, urn: string) =>
+    request<{ ok: boolean; verified_category: string; in_43bh_scope: boolean; drift: boolean }>(
+      "POST",
+      apiPaths.POST_BOOKS_COUNTERPARTIES_PARTY_ID_VERIFY_MSME.replace("{party_id}", partyId),
+      { urn },
+    ),
+  payablesPlan: () => request<PlanOut>("GET", apiPaths.GET_PAYABLES_PLAN),
+  imsQueue: () => request<ImsQueueOut>("GET", apiPaths.GET_IMS_QUEUE),
+  leaks: () => request<LeakListOut>("GET", apiPaths.GET_LEAKS),
+  leakUsage: (id: string, usage: "in_use" | "unused") =>
+    request<{ ok: boolean; usage: string; rescore_required: boolean }>(
+      "POST",
+      apiPaths.POST_LEAKS_SUBSCRIPTION_ID_USAGE.replace("{subscription_id}", id),
+      { usage },
+    ),
+  leakAction: (id: string, kind: "cancel" | "renegotiate" | "downgrade") =>
+    request<{ ok: boolean; approval_id: string; kind: string }>(
+      "POST",
+      apiPaths.POST_LEAKS_SUBSCRIPTION_ID_ACTION.replace("{subscription_id}", id),
+      { kind },
+    ),
+  imsSync: () => request<ImsSyncOut>("POST", apiPaths.POST_IMS_SYNC),
+  imsAction: (recordId: string, targetState: "accepted" | "rejected") =>
+    request<{ ok: boolean; approval_id: string }>(
+      "POST",
+      apiPaths.POST_IMS_RECORDS_RECORD_ID_ACTION.replace("{record_id}", recordId),
+      { target_state: targetState },
+    ),
+  auditVerify: () =>
+    request<{
+      valid: boolean;
+      entries: number;
+      head_hash: string;
+      broken_at?: { index: number; id: string; action: string };
+    }>("GET", apiPaths.GET_AUDIT_VERIFY),
+  closeChecklist: () => request<CloseChecklistOut>("GET", apiPaths.GET_CLOSE_CHECKLIST),
+  closeSignoff: (rationale?: string) =>
+    request<{ ok: boolean; period: string; warnings: string[] }>(
+      "POST",
+      apiPaths.POST_CLOSE_SIGNOFF,
+      { rationale },
+    ),
+  closePackPath: () => `${API_PREFIX}${apiPaths.GET_CLOSE_PACK}`,
   monthEndReport: (period: string) =>
     request<MonthEndReport>(
       "GET",
       `${apiPaths.GET_REPORTS_MONTH_END}?period=${period}`,
     ),
   why: (kind: string, id: string) =>
-    request<{ entity_ref: string; events: WhyEvent[] }>(
+    request<{ entity_ref: string; events: WhyEvent[]; memory?: MemoryBelief[] }>(
       "GET",
       apiPaths.GET_WHY_ENTITY_TYPE_ENTITY_ID.replace("{entity_type}", kind).replace(
         "{entity_id}",
         id,
       ),
     ),
-  anomalies: () => request<AnomalyCard[]>("GET", apiPaths.GET_ANOMALIES),
+  // status_filter "" = all statuses; the page splits open vs handled itself.
+  anomalies: (statusFilter = "") =>
+    request<AnomalyCard[]>("GET", `${apiPaths.GET_ANOMALIES}?status_filter=${statusFilter}`),
   decideAnomaly: (id: string, decision: "accepted" | "dismissed" | "recovered") =>
     request<{ ok: boolean }>(
       "POST",
@@ -311,10 +711,22 @@ export const api = {
       apiPaths.POST_APPROVALS_APPROVAL_ID_DECIDE.replace("{approval_id}", id),
       { decision, rationale },
     ),
-  transactions: (statusFilter?: string) =>
-    request<TxnPage>(
+  transactions: (statusFilter?: string, cursor?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status_filter", statusFilter);
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    return request<TxnPage>(
       "GET",
-      `${apiPaths.GET_BOOKS_TRANSACTIONS}${statusFilter ? `?status_filter=${statusFilter}` : ""}`,
+      `${apiPaths.GET_BOOKS_TRANSACTIONS}${qs ? `?${qs}` : ""}`,
+    );
+  },
+  exceptions: () => request<TxnPage>("GET", apiPaths.GET_BOOKS_EXCEPTIONS),
+  switchTenant: (tenantId: string) =>
+    request<TokenPair>(
+      "POST",
+      apiPaths.POST_TENANTS_TENANT_ID_SWITCH.replace("{tenant_id}", tenantId),
     ),
   chartOfAccounts: () =>
     request<ChartAccount[]>("GET", apiPaths.GET_BOOKS_CHART_OF_ACCOUNTS),
@@ -335,9 +747,8 @@ export const api = {
   }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_ONBOARDING}`, {
+    const res = await authorizedFetch(`${API_PREFIX}${apiPaths.POST_BOOKS_ONBOARDING}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
     });
     if (!res.ok) {
@@ -349,9 +760,8 @@ export const api = {
   importStatement: async (file: File): Promise<{ document_id: string; run_id: string }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_PREFIX}${apiPaths.POST_BOOKS_IMPORTS}`, {
+    const res = await authorizedFetch(`${API_PREFIX}${apiPaths.POST_BOOKS_IMPORTS}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
       body: form,
     });
     if (!res.ok) {
@@ -360,10 +770,34 @@ export const api = {
     }
     return res.json();
   },
-  me: () => request<{ email: string; active_tenant_id: string; role: string }>("GET", apiPaths.GET_ME),
+  tallySync: () =>
+    request<{
+      mode: "fixture" | "live";
+      period: string;
+      invoices_created: number;
+      invoices_updated: number;
+      invoices_skipped: number;
+      bills_created: number;
+      bills_updated: number;
+      bills_skipped: number;
+      parties_created: number;
+      unclassified_vendors: number;
+      status_conflicts: number;
+    }>("POST", apiPaths.POST_BOOKS_IMPORTS_TALLY),
+  me: () =>
+    request<{
+      email: string;
+      active_tenant_id: string;
+      role: string;
+      memberships: { tenant_id: string; tenant_name: string; role: string }[];
+    }>("GET", apiPaths.GET_ME),
+  agentHealth: () =>
+    request<{ worker: boolean; memory: boolean }>("GET", apiPaths.GET_AGENT_HEALTH),
   startRun: (graph: string, params: Record<string, unknown> = {}) =>
     request<RunOut>("POST", apiPaths.POST_AGENT_RUNS, { graph, params }),
   listRuns: () => request<RunOut[]>("GET", apiPaths.GET_AGENT_RUNS),
+  getRun: (runId: string) =>
+    request<RunOut>("GET", apiPaths.GET_AGENT_RUNS_RUN_ID.replace("{run_id}", runId)),
   streamPath: (runId: string) =>
     `${API_PREFIX}${apiPaths.GET_AGENT_RUNS_RUN_ID_STREAM.replace("{run_id}", runId)}`,
 };

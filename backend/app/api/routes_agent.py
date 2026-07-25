@@ -11,13 +11,27 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app import memoryclient
 from app.auth.deps import Auth
+from app.config import get_settings
 from app.db import session_scope
 from app.db.models import AgentRun
 from app.db.repositories import RunRepo
-from app.events.streams import enqueue_job, subscribe_run
+from app.events.streams import enqueue_job, get_redis, subscribe_run
 
 router = APIRouter(tags=["agent"])
+
+# A healthy worker re-polls the stream every 2s (xreadgroup block=2000), so
+# prolonged consumer idle means it is gone or wedged.
+#
+# But idle measures time since the last POLL, not liveness: a worker inside a
+# long graph is not polling at all, so a slow run makes a perfectly healthy
+# worker read as offline. subscription_scan takes ~30s (two LLM providers plus a
+# memory query per vendor) and sat exactly on the old 30s threshold, which is how
+# this surfaced. Two changes: a wider idle window, and — the actual fix —
+# in-flight work counts as alive, because a consumer holding pending entries is
+# by definition processing them.
+WORKER_IDLE_THRESHOLD_MS = 90_000
 
 # grows as graphs land (docs/architecture/01 §2)
 KNOWN_GRAPHS = {
@@ -28,6 +42,8 @@ KNOWN_GRAPHS = {
     "cash_forecast",
     "working_capital",
     "enforcer_45day",
+    "month_end_close",
+    "subscription_scan",
 }
 
 
@@ -41,6 +57,9 @@ class StepOut(BaseModel):
     name: str
     status: str
     detail: dict[str, Any]
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
 
 
 class RunOut(BaseModel):
@@ -48,7 +67,44 @@ class RunOut(BaseModel):
     graph: str
     status: str
     params: dict[str, Any]
+    created_at: str | None = None
     steps: list[StepOut] = []
+
+
+def _step_out(s: Any) -> StepOut:
+    """Timing from the row lifecycle: created at 'started', updated on finish."""
+    done = s.status in {"finished", "failed"}
+    duration_ms = (
+        int((s.updated_at - s.created_at).total_seconds() * 1000) if done else None
+    )
+    return StepOut(
+        step_id=s.step_id,
+        name=s.name,
+        status=s.status,
+        detail=s.detail,
+        started_at=s.created_at.isoformat(),
+        finished_at=s.updated_at.isoformat() if done else None,
+        duration_ms=duration_ms,
+    )
+
+
+@router.get("/agent/health")
+async def agent_health(auth: Auth) -> dict[str, bool]:
+    """Real liveness for the sidebar badge — never guesses, never raises."""
+    settings = get_settings()
+    worker = False
+    try:
+        consumers = await get_redis().xinfo_consumers(
+            settings.jobs_stream_interactive, settings.jobs_consumer_group
+        )
+        worker = any(
+            int(c.get("idle", 1 << 62)) < WORKER_IDLE_THRESHOLD_MS
+            or int(c.get("pending", 0)) > 0  # busy on a long graph, not gone
+            for c in consumers
+        )
+    except Exception:  # noqa: BLE001 — stream/group missing or redis down = not live
+        worker = False
+    return {"worker": worker, "memory": await memoryclient.ping()}
 
 
 @router.post("/agent/runs", status_code=status.HTTP_202_ACCEPTED, response_model=RunOut)
@@ -74,7 +130,14 @@ async def list_runs(auth: Auth) -> list[RunOut]:
     async with session_scope() as session:
         runs = await RunRepo(session).list_for_tenant(auth.tenant_id)
         return [
-            RunOut(run_id=r.id, graph=r.graph, status=r.status, params=r.params) for r in runs
+            RunOut(
+                run_id=r.id,
+                graph=r.graph,
+                status=r.status,
+                params=r.params,
+                created_at=r.created_at.isoformat(),
+            )
+            for r in runs
         ]
 
 
@@ -91,10 +154,8 @@ async def get_run(run_id: str, auth: Auth) -> RunOut:
             graph=run.graph,
             status=run.status,
             params=run.params,
-            steps=[
-                StepOut(step_id=s.step_id, name=s.name, status=s.status, detail=s.detail)
-                for s in steps
-            ],
+            created_at=run.created_at.isoformat(),
+            steps=[_step_out(s) for s in steps],
         )
 
 

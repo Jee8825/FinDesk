@@ -16,15 +16,24 @@ def build_graph():
     g.add_node("categorize", nodes.categorize)
     g.add_node("critic", nodes.critic)
     g.add_node("commit", nodes.commit)
+    g.add_node("escalate", nodes.escalate)
     g.add_node("learn", nodes.learn)
     g.add_edge(START, "fetch_and_parse")
     g.add_edge("fetch_and_parse", "ingest")
     g.add_edge("ingest", "match")
     g.add_edge("match", "categorize")
     g.add_edge("categorize", "critic")
-    g.add_edge("critic", "commit")
+    # the graph's decision: post what survived the critic, or explain what did
+    # not. `learn` hangs off commit only — it writes memory from *committed*
+    # outcomes, so there is nothing to learn down the escalate path.
+    g.add_conditional_edges(
+        "critic",
+        nodes.route_after_critic,
+        {"commit": "commit", "escalate": "escalate"},
+    )
     g.add_edge("commit", "learn")
     g.add_edge("learn", END)
+    g.add_edge("escalate", END)
     return g.compile()
 
 

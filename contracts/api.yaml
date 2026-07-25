@@ -27,6 +27,9 @@ tags:
   - name: anomalies
   - name: approvals
   - name: cash
+  - name: ims
+  - name: leaks
+  - name: close
   - name: why
   - name: webhooks
 
@@ -38,16 +41,24 @@ paths:
       summary: Email+password login (optional TOTP step-up)
       responses: { "200": { description: tokens } }
   /auth/refresh:
-    post: { tags: [auth], security: [], summary: Rotate refresh token, responses: { "200": { description: tokens } } }
+    post: { tags: [auth], security: [], summary: "Rotate refresh token — presented jti is revoked, new pair minted (B1); rate-limited", responses: { "200": { description: tokens } } }
+  /auth/logout:
+    post: { tags: [auth], security: [], summary: Revoke a refresh token's jti server-side (idempotent), responses: { "200": { description: ok } } }
   /me:
     get: { tags: [auth], summary: Current user + memberships, responses: { "200": { description: profile } } }
   /tenants/{tenant_id}/switch:
+    parameters: [{ name: tenant_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [auth], summary: Switch active tenant (CA console), responses: { "200": { description: new token } } }
 
   /books/transactions:
     get: { tags: [books], summary: Normalized bank feed (cursor paginated), responses: { "200": { description: page } } }
   /books/imports:
     post: { tags: [books], summary: Upload statement/export file → 202 + run_id, responses: { "202": { description: queued } } }
+  /books/imports/tally:
+    post:
+      tags: [books]
+      summary: Pull outstanding receivables+payables through the Tally HTTP-XML connector (fixture or live mode; mode echoed in the response)
+      responses: { "200": { description: sync summary } }
   /books/onboarding:
     post:
       tags: [books]
@@ -58,6 +69,7 @@ paths:
   /books/chart-of-accounts:
     get: { tags: [books], summary: Tenant chart of accounts, responses: { "200": { description: accounts } } }
   /books/transactions/{txn_id}/category:
+    parameters: [{ name: txn_id, in: path, required: true, schema: { type: string } }]
     patch:
       tags: [books]
       summary: Human category correction — also writes a vendor_category memory claim
@@ -69,28 +81,39 @@ paths:
     post: { tags: [agent], summary: Start a graph run (kind + params) → run_id, responses: { "202": { description: queued } } }
     get: { tags: [agent], summary: List runs, responses: { "200": { description: page } } }
   /agent/runs/{run_id}:
+    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
     get: { tags: [agent], summary: Run status + steps, responses: { "200": { description: run } } }
   /agent/runs/{run_id}/stream:
+    parameters: [{ name: run_id, in: path, required: true, schema: { type: string } }]
     get:
       tags: [agent]
       summary: SSE stream of run events (shapes in contracts/events.md)
       responses: { "200": { description: text/event-stream } }
-  /agent/runs/{run_id}/cancel:
-    post: { tags: [agent], summary: Cancel a run, responses: { "200": { description: cancelled } } }
+  # roadmap (not mounted — scripts/check_api_surface.py enforces this file
+  # matches the app): POST /agent/runs/{run_id}/cancel needs worker
+  # cooperation (checkpoint + abort between nodes), not just a status flip.
+  /agent/health:
+    get:
+      tags: [agent]
+      summary: Live subsystem health — worker consumer liveness + memory-engine reachability
+      responses: { "200": { description: "{worker: bool, memory: bool}" } }
 
   /conflicts:
     get: { tags: [conflicts], summary: Conflict cards (filter by status), responses: { "200": { description: page } } }
   /conflicts/{conflict_id}/resolve:
+    parameters: [{ name: conflict_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [conflicts], summary: One-tap resolution (winning claim + rationale), responses: { "200": { description: resolved } } }
 
   /anomalies:
     get: { tags: [anomalies], summary: Anomaly cards, responses: { "200": { description: page } } }
   /anomalies/{anomaly_id}/decide:
+    parameters: [{ name: anomaly_id, in: path, required: true, schema: { type: string } }]
     post: { tags: [anomalies], summary: accept | dismiss | mark recovered, responses: { "200": { description: updated } } }
 
   /approvals:
     get: { tags: [approvals], summary: Approval queue, responses: { "200": { description: page } } }
   /approvals/{approval_id}/decide:
+    parameters: [{ name: approval_id, in: path, required: true, schema: { type: string } }]
     post:
       tags: [approvals]
       summary: Approve/reject; on approve mints single-use action token and resumes the run
@@ -98,16 +121,68 @@ paths:
 
   /forecast:
     get: { tags: [cash], summary: Latest forecast (scenarios + lines + drivers), responses: { "200": { description: forecast } } }
+  /forecast/whatif:
+    post:
+      tags: [cash]
+      summary: Deterministic what-if on the stored base scenario (collection delay, inflow haircut, extra outflow) — server computes, UI only renders
+      responses: { "200": { description: adjusted weeks + gap } }
+  /receivables/{invoice_id}/promise:
+    parameters: [{ name: invoice_id, in: path, required: true, schema: { type: string } }]
+    post: { tags: [cash], summary: "Log a client's promise-to-pay; settlement classifies kept/broken deterministically when recon marks the invoice paid (F3 outcome loop)", responses: { "201": { description: created } } }
   /receivables/radar:
-    get: { tags: [cash], summary: 45-day clocks, accrued interest, escalation states, responses: { "200": { description: radar } } }
+    get: { tags: [cash], summary: "45-day clocks, accrued interest, escalation states", responses: { "200": { description: radar } } }
+  /books/counterparties/{party_id}/verify-msme:
+    parameters: [{ name: party_id, in: path, required: true, schema: { type: string } }]
+    post: { tags: [books], summary: "Verify a vendor's Udyam URN (fixture register today) — verified category then scopes §15/43B(h); tag kept alongside, disagreement = drift alert", responses: { "200": { description: verification } } }
+  /payables/compliance:
+    get: { tags: [cash], summary: "Buyer-side MSE payables — §15 clock, §16 interest owed, MSME disallowance exposure per open bill; each bill's clock carries `statute`, the citation for THAT bill's tax year (§43B(h) ITA-1961 through FY 2025-26, §37(2)(g) ITA-2025 from 1 Apr 2026)", responses: { "200": { description: compliance } } }
+  /payables/plan:
+    get: { tags: [cash], summary: "Deduction Defense — deterministic ranked pay-first plan (closing windows by deadline, breached by daily §16 bleed), cash-aware via latest forecast", responses: { "200": { description: plan } } }
+  /leaks:
+    get: { tags: [leaks], summary: "LeakRadar table — recurring vendor series with cadence, silent price drift, leak score (0-100) + components, recoverable rupees per year, and category-wise annualized cost; excluded commitments (rent/payroll/EMI) are listed at score 0", responses: { "200": { description: leaks } } }
+  /leaks/{subscription_id}/usage:
+    post:
+      tags: [leaks]
+      summary: "Record whether the user still uses a subscription — the one leak signal bank data cannot produce; written to Recall as a decaying belief and picked up by the next scan"
+      parameters: [{ name: subscription_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: recorded }, "404": { description: not found } }
+  /leaks/{subscription_id}/action:
+    post:
+      tags: [leaks]
+      summary: "Queue a cancel/renegotiate/downgrade vendor email for maker-checker approval using the draft the scan wrote; never sends (\u26a0 consequential \u2014 send happens in decide_approval with a single-use token)"
+      parameters: [{ name: subscription_id, in: path, required: true, schema: { type: string } }]
+      responses: { "202": { description: queued }, "409": { description: no draft yet } }
+  /ims/sync:
+    post: { tags: [ims], summary: "Pull the tenant's IMS queue (fixture GSP today) and re-run the deterministic 3-way match + recommendation; decided states are terminal for sync", responses: { "200": { description: counts } } }
+  /ims/queue:
+    get: { tags: [ims], summary: "IMS triage queue — records with match tier / recommendation / evidence note, ITC-at-stake totals, and the deemed-acceptance clock (per-record deemed_accept_at/days_remaining/urgency + a queue rollup: next_deadline, itc_at_risk_paise, itc_lapsed_paise, lapsing_soon_paise)", responses: { "200": { description: queue } } }
+  /ims/records/{record_id}/action:
+    parameters: [{ name: record_id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [ims]
+      summary: Request accept/reject on one record — queues a maker-checker approval; execution only via decide with a minted token (never direct)
+      responses: { "200": { description: queued } }
+
   /wc-actions:
     get: { tags: [cash], summary: Ranked working-capital options, responses: { "200": { description: page } } }
   /wc-actions/{action_id}/request:
+    parameters: [{ name: action_id, in: path, required: true, schema: { type: string } }]
     post:
       tags: [cash]
       summary: Move a proposed action into the approval queue (treds only; collect routes via collections)
       responses: { "200": { description: queued } }
 
+  /close/checklist:
+    get: { tags: [close], summary: "Month-end close checklist — evidence-linked composition over existing engines (recon, conflicts, anomalies, §15 clocks, MSME drift, IMS, forecast freshness, audit chain); blockers vs warnings", responses: { "200": { description: checklist } } }
+  /close/signoff:
+    post: { tags: [close], summary: "Maker-checker close sign-off — 409 while blocked; warnings require a rationale; the close record is an audit-chain entry (close.signoff)", responses: { "200": { description: signed } } }
+  /close/pack:
+    get: { tags: [close], summary: "Close pack zip = credit pack + close_checklist.md — deterministic, regenerate-and-diff", responses: { "200": { description: zip } } }
+
+  /dataroom/export:
+    get: { tags: [trust], summary: "Credit pack zip — summary.md (score + audit head hash) + receivables/payables/forecast CSVs, all deterministic", responses: { "200": { description: zip } } }
+  /audit/verify:
+    get: { tags: [trust], summary: "Recompute the tenant's hash-chained audit log live — {valid, entries, head_hash, broken_at?}", responses: { "200": { description: verification } } }
   /dataroom:
     get: { tags: [cash], summary: Credit-ready data room — FinDesk Score + verified evidence, responses: { "200": { description: room } } }
   /dataroom/share:
@@ -120,15 +195,17 @@ paths:
       responses: { "200": { description: room } }
 
   /why/{entity_type}/{entity_id}:
+    parameters: [{ name: entity_type, in: path, required: true, schema: { type: string } }, { name: entity_id, in: path, required: true, schema: { type: string } }]
     get:
       tags: [why]
       summary: Composed evidence chain (app provenance + memory why-chain)
       responses: { "200": { description: evidence trail } }
 
-  /webhooks/aa/consent:
-    post: { tags: [webhooks], security: [], summary: Account Aggregator consent callback (signed), responses: { "200": { description: ok } } }
-  /webhooks/email/events:
-    post: { tags: [webhooks], security: [], summary: Email delivery/open/reply events (signed), responses: { "200": { description: ok } } }
+  # roadmap webhooks (declared here again when their integrations land;
+  # the surface guard fails CI on any path this file claims but the app
+  # doesn't mount): POST /webhooks/aa/consent (needs the AA TSP/FIU
+  # partnership), POST /webhooks/email/events (needs a real email provider
+  # — the sandbox writes .eml files and emits no events).
 
 components:
   securitySchemes:

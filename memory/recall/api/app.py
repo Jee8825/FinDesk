@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Recall",
-        version="0.1.0",
+        version="0.2.0",
         description="A living memory engine for LLM agents.",
         lifespan=lifespan,
     )

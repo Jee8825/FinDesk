@@ -1,0 +1,17 @@
+{
+  "_comment": "Sandbox Udyam register — keyed by URN. Names align with scripts/seed_dev_data.py MSE vendors so the payables drift demo fires live: Sundaram verifies micro (confirms the self-declared tag), Kaveri verifies MEDIUM (grew out of 43B(h) scope — the FY-boundary drift the buyer must catch). Unknown URNs return found=false.",
+  "register": {
+    "UDYAM-TN-02-0001234": {
+      "enterprise_name": "Sundaram Packaging",
+      "category": "micro",
+      "major_activity": "Manufacturing — corrugated packaging",
+      "as_of": "2026-04-01"
+    },
+    "UDYAM-KA-05-0567890": {
+      "enterprise_name": "Kaveri Print Works",
+      "category": "medium",
+      "major_activity": "Printing and reproduction of recorded media",
+      "as_of": "2026-04-01"
+    }
+  }
+}

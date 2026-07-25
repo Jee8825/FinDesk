@@ -2,6 +2,294 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- theme tokens: dark is the root, light overrides -------------- */
+:root {
+  color-scheme: dark;
+  --c-paper: 6 10 18;
+  --c-cream: 12 17 32;
+  --c-cream2: 10 14 26;
+  --c-card: 16 21 39;
+  --c-line: rgba(148, 163, 204, 0.16);
+  --c-line2: rgba(148, 163, 204, 0.09);
+  --c-ink: 237 241 250;
+  --c-mute: 166 173 196;
+  --c-faint: 125 134 166;
+  --c-annot: 89 97 128;
+  --c-accent: 255 160 40;
+  --c-accent-soft: 255 194 110;
+  --accent-contrast: #1a1204;
+  --c-moss: 67 214 149;
+  --c-mint: 125 239 192;
+  --c-claret: 255 110 102;
+  --c-blush: 255 156 150;
+  --c-memory: 123 163 232;
+  --c-deep-bg: 4 7 13;
+  --c-deep-card: 13 18 34;
+  --c-deep-card2: 19 26 48;
+  --c-deep-mute: 135 144 170;
+  --fill-1: rgba(255, 255, 255, 0.03);
+  --fill-2: rgba(255, 255, 255, 0.05);
+  --fill-3: rgba(255, 255, 255, 0.07);
+  --chart-base: #ffa028;
+  --chart-up: #2dd4bf;
+  --chart-down: #a78bfa;
+  --chart-danger: #ff6e66;
+  --chart-grid: rgba(148, 163, 204, 0.3);
+  --chart-text: #7d86a6;
+  --chart-dot: #101527;
+}
+
+/* light: the ledger-paper heritage returns under the glass */
+[data-theme="light"] {
+  color-scheme: light;
+  --c-paper: 241 236 223;
+  --c-cream: 251 248 241;
+  --c-cream2: 244 239 228;
+  --c-card: 251 248 241;
+  --c-line: rgba(35, 41, 60, 0.16);
+  --c-line2: rgba(35, 41, 60, 0.09);
+  --c-ink: 35 41 60;
+  --c-mute: 77 85 112;
+  --c-faint: 102 111 142;
+  --c-annot: 102 111 142;
+  --c-accent: 194 65 12;
+  --c-accent-soft: 180 83 9;
+  --accent-contrast: #ffffff;
+  --c-moss: 23 122 76;
+  --c-mint: 10 122 80;
+  --c-claret: 192 57 47;
+  --c-blush: 168 58 50;
+  --c-memory: 60 98 170;
+  --c-deep-bg: 231 224 206;
+  --c-deep-card: 244 239 228;
+  --c-deep-card2: 236 230 214;
+  --c-deep-mute: 90 98 128;
+  --fill-1: rgba(35, 41, 60, 0.04);
+  --fill-2: rgba(35, 41, 60, 0.06);
+  --fill-3: rgba(35, 41, 60, 0.09);
+  --chart-base: #c2410c;
+  --chart-up: #0f766e;
+  --chart-down: #6d28d9;
+  --chart-danger: #c0392f;
+  --chart-grid: rgba(35, 41, 60, 0.25);
+  --chart-text: #666f8e;
+  --chart-dot: #fbf8f1;
+}
+
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-paper text-ink antialiased;
+  background-image:
+    radial-gradient(1200px 800px at 80% -10%, rgba(109, 40, 217, 0.08), transparent 60%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(14, 116, 144, 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(1200px 800px at 80% -10%, rgba(124, 58, 237, 0.06), transparent 60%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(14, 165, 183, 0.05), transparent 60%);
+}
+
+/* light glass: white panes over paper, same anatomy */
+[data-theme="light"] .glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.45)),
+    rgba(251, 248, 241, 0.6);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(35, 41, 60, 0.08),
+    0 18px 40px -24px rgba(97, 84, 55, 0.35);
+}
+[data-theme="light"] .glass-strong {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.7)),
+    rgba(251, 248, 241, 0.8);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 1px rgba(35, 41, 60, 0.1),
+    0 24px 48px -28px rgba(97, 84, 55, 0.4);
+}
+[data-theme="light"] .glass-rail {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.55)),
+    rgba(244, 239, 228, 0.7);
+}
+[data-theme="light"] .fx-aura {
+  opacity: 0.3 !important;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(35, 41, 60, 0.25);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::selection {
+  background: rgba(255, 160, 40, 0.3);
+}
+
+@layer components {
+  /* uppercase mono micro-label — the system's annotation voice */
+  .mono-label {
+    @apply font-mono text-[10px] uppercase tracking-[0.14em];
+  }
+  .mono-annot {
+    @apply font-mono text-[11px] text-annot;
+  }
+
+  /* ---- liquid glass surfaces -------------------------------------- */
+  /* Core recipe: translucent fill + backdrop blur/saturate + hairline
+     top highlight + grain. (liquid-glass-js studied as reference; this
+     is the CSS-native equivalent — no html2canvas, no WebGL cost.) */
+  .glass {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)),
+      rgba(16, 21, 39, 0.55);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+      inset 0 0 0 1px rgba(148, 163, 204, 0.1),
+      0 24px 48px -24px rgba(2, 6, 16, 0.9);
+  }
+  .glass-strong {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+      rgba(19, 26, 48, 0.72);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+      inset 0 0 0 1px rgba(148, 163, 204, 0.14),
+      0 32px 64px -32px rgba(2, 6, 16, 0.95);
+  }
+  .glass-rail {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+      rgba(10, 14, 26, 0.7);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    backdrop-filter: blur(20px) saturate(1.3);
+  }
+
+  /* film grain so glass doesn't band — tiny data-URI noise, screen blend */
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0.12;
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  /* ---- the ledger beam — design-v2's signature --------------------- */
+  /* A refraction line under every page header: amber → violet → teal.
+     Idle: slow shimmer. [data-agent-live] : quick pulse (SSE runs). */
+  .ledger-beam {
+    position: relative;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 999px;
+  }
+  .ledger-beam::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 160, 40, 0.9) 18%,
+      rgba(167, 139, 250, 0.9) 50%,
+      rgba(45, 212, 191, 0.9) 82%,
+      transparent 100%
+    );
+    background-size: 220% 100%;
+    animation: beam-drift 9s ease-in-out infinite;
+  }
+  [data-agent-live="true"] .ledger-beam::before {
+    animation: beam-drift 1.8s linear infinite;
+  }
+  @keyframes beam-drift {
+    0% {
+      background-position: 130% 0;
+    }
+    50% {
+      background-position: -30% 0;
+    }
+    100% {
+      background-position: 130% 0;
+    }
+  }
+
+  /* number tabulation for money columns */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* CSS entrance stagger — survives rAF throttling (fill-mode: both can
+     never strand content invisible, unlike delayed JS tweens) */
+  .rise-in {
+    animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-kids > * {
+    animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-kids > *:nth-child(1) { animation-delay: 0.1s; }
+  .stagger-kids > *:nth-child(2) { animation-delay: 0.18s; }
+  .stagger-kids > *:nth-child(3) { animation-delay: 0.26s; }
+  .stagger-kids > *:nth-child(4) { animation-delay: 0.34s; }
+  .stagger-kids > *:nth-child(5) { animation-delay: 0.42s; }
+  .stagger-kids > *:nth-child(6) { animation-delay: 0.5s; }
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* focus is part of the design, not an afterthought */
+:focus-visible {
+  outline: 2px solid rgba(255, 160, 40, 0.8);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* quiet glass scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 204, 0.25);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 204, 0.4);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* the whole system honors reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .ledger-beam::before {
+    animation: none;
+    background-position: 50% 0;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,55 +1,126 @@
 "use client";
-
+// Data Room — "Score hero" (wireframe Data Room A, dark surface B5):
+// credit-ready exports, FinDesk Score, tokenized lender share links.
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { Link2 } from "lucide-react";
 import { useState } from "react";
 
 import { DataRoomView } from "@/components/DataRoomView";
-import { api } from "@/lib/api";
+import { Card, ErrorNote, GhostBtn, MonoLabel, PageShell, PrimaryBtn, Skeleton } from "@/components/ui";
+import { api, authorizedFetch } from "@/lib/api";
+import { API_PREFIX, apiPaths } from "@/lib/generated/api-paths";
+
+function AuditChip() {
+  const audit = useQuery({ queryKey: ["audit-verify"], queryFn: () => api.auditVerify() });
+  const a = audit.data;
+  if (!a) return null;
+  return (
+    <span
+      className={`mono-label inline-flex items-center gap-1.5 rounded-full border px-3 py-1 ${
+        a.valid ? "border-mint/40 text-mint" : "border-blush/50 text-blush"
+      }`}
+      title={
+        a.valid
+          ? `hash chain recomputed live · head ${a.head_hash.slice(0, 12)}…`
+          : `chain breaks at entry #${a.broken_at?.index} (${a.broken_at?.action})`
+      }
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${a.valid ? "bg-mint" : "bg-blush"}`} />
+      {a.valid ? `audit chain verified · ${a.entries} entries` : "audit chain BROKEN"}
+    </span>
+  );
+}
 
 export default function DataRoomPage() {
   const room = useQuery({ queryKey: ["dataroom"], queryFn: () => api.dataroom() });
   const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const share = useMutation({
     mutationFn: () => api.shareDataroom(),
     onSuccess: async (data) => {
       const url = `${window.location.origin}/share?token=${encodeURIComponent(data.share_token)}`;
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 4000);
+      setShareUrl(url); // always visible — clipboard is best-effort
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 4000);
+      } catch {
+        // clipboard unavailable (permissions/headless) — the inline URL suffices
+      }
     },
   });
 
   return (
-    <div className="max-w-3xl">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Credit data room</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Books a lender can trust cheaply: a published score, a verifiable audit chain, and
-            evidence behind every number.
-          </p>
-        </div>
-        <button
-          onClick={() => share.mutate()}
-          disabled={share.isPending}
-          className="rounded-md bg-teal-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {copied ? "Link copied ✓ (7 days)" : "Share with lender"}
-        </button>
+    <PageShell
+      title="Data Room"
+      surface="dark"
+      subtitle="Credit-ready exports, FinDesk Score, lender share links"
+      annotation="GET /dataroom · tokenized share links"
+    >
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <p className="mono-annot">
+          ◇ b5 · credit-ready exports + findesk score · tokenized share links for lenders
+        </p>
+        <AuditChip />
       </div>
 
-      {room.isLoading && <div className="mt-6 h-64 animate-pulse rounded-xl bg-slate-100" />}
-      {room.isError && <p className="mt-6 text-sm text-red-600">Could not build the data room.</p>}
+      {room.isLoading && <Skeleton className="h-96" />}
+      {room.isError && <ErrorNote>Could not build the data room.</ErrorNote>}
       {room.data && (
-        <div className="mt-6">
+        <>
           <DataRoomView room={room.data} />
-        </div>
+          <Card className="mt-5 flex flex-wrap items-center justify-between gap-4 p-6">
+            <div>
+              <h3 className="text-[15px] font-bold text-dark-text">Lender share link</h3>
+              <p className="mono-annot mt-1 flex items-center gap-1.5">
+                <Link2 size={11} /> expires 7d · view-only · the signed token is the credential
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <GhostBtn
+                onClick={async () => {
+                  const res = await authorizedFetch(
+                    `${API_PREFIX}${apiPaths.GET_DATAROOM_EXPORT}`,
+                    { method: "GET" },
+                  );
+                  if (!res.ok) return;
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `findesk-credit-pack-${new Date().toISOString().slice(0, 10)}.zip`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                title="summary.md + receivables/payables/forecast CSVs — deterministic, audit head hash inside"
+              >
+                Download credit pack
+              </GhostBtn>
+              <PrimaryBtn onClick={() => share.mutate()} disabled={share.isPending}>
+                {copied ? "Link copied ✓" : share.isPending ? "Minting…" : "Generate link"}
+              </PrimaryBtn>
+            </div>
+            {shareUrl && (
+              <div className="w-full">
+                <MonoLabel>share url</MonoLabel>
+                <input
+                  readOnly
+                  value={shareUrl}
+                  aria-label="lender share url"
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="mt-1.5 w-full rounded-lg border border-dark-line bg-transparent p-2.5 font-mono text-xs text-dark-text"
+                />
+              </div>
+            )}
+          </Card>
+          {share.isError && (
+            <ErrorNote>
+              {share.error instanceof Error ? share.error.message : "could not create share link"}
+            </ErrorNote>
+          )}
+        </>
       )}
-      {share.isError && (
-        <p className="mt-3 text-sm text-red-600" role="alert">
-          {share.error instanceof Error ? share.error.message : "could not create share link"}
-        </p>
-      )}
-    </div>
+    </PageShell>
   );
 }

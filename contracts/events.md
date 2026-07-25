@@ -17,8 +17,16 @@ Shapes for Redis stream messages and SSE events. All events share the envelope:
 ## Streams
 
 `agents:interactive` (user-triggered, low latency) · `agents:batch` (scheduled
-sweeps). Consumer groups per graph type. At-least-once; consumers must be
-idempotent on `id`.
+sweeps) · `agents:dead` (poison jobs — see below). Consumer groups per graph
+type. At-least-once; consumers must be idempotent on `id`.
+
+**Pending-entry adoption:** workers use a stable consumer name and
+periodically claim entries idle past `worker_reclaim_idle_ms`
+(default 60s). An entry already delivered `worker_max_deliveries` times
+(default 3) is poison: it is appended to `agents:dead` verbatim plus a
+`dead_reason` field, its run is closed with `run.done@v1{status:"failed"}`,
+and it is acked off the main stream. `agents:dead` has no consumer group —
+it is an operator inspection surface (`XRANGE agents:dead - +`).
 
 ## Job events (backend → agents)
 
@@ -31,6 +39,7 @@ idempotent on `id`.
 | `job.enforcer_tick.requested@v1` | `{ }` |
 | `job.forecast.requested@v1` | `{ debounce_key }` |
 | `job.month_end_close.requested@v1` | `{ period: "YYYY-MM", requested_by: user_id }` |
+| `job.subscription_scan.requested@v1` | `{ }` — LeakRadar re-scan; reads the tenant's full debit history and its `leak_mode` (business\|personal) from the DB, so the payload carries nothing |
 | `run.resume@v1` | `{ run_id, approval_id, decision: "approved"\|"rejected" }` |
 
 ## Domain events (any → any, fan-out)

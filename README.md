@@ -2,11 +2,11 @@
 
 > It doesn't just close your books. It defends your cash.
 
-FinDesk is an autonomous finance-operations and cash-command agent for Indian startups, SMEs and MSMEs (10–200 employees). It sits **on top of** the books a business already keeps (Tally, Zoho Books) — it does not replace them.
+FinDesk is an autonomous finance-operations and cash-command agent for Indian startups, SMEs and MSMEs (10–200 employees). It is designed to sit **on top of** the books a business already keeps (Tally, Zoho Books) — it does not replace them. Today it ingests bank statements and ledger exports through a file-first pipeline plus a fixture-tested TallyPrime HTTP-XML connector; live two-way sync and Account Aggregator feeds are roadmap (see *Integration status* below).
 
 **Module A — Bookkeeping Foundation** autonomously produces clean, conflict-free, provenance-backed books: ingestion, TDS-aware reconciliation, consistent categorization, cross-period conflict detection, anomaly detection, receivables chasing, explainable reporting.
 
-**Module B — Cash Command Layer** turns those books into foresight and action: per-client payment-behavior prediction, MSME Act 45-day enforcement, living 4/13-week cash forecasts with confidence bands, TReDS-integrated working-capital actions, and a credit-ready data room.
+**Module B — Cash Command Layer** turns those books into foresight and action: per-client payment-behavior tracking, MSME Act 45-day interest telemetry (both directions — receivables you're owed on, payables that put your 43B(h) tax deduction at risk), living 4/13-week cash forecasts with confidence bands, TReDS-aware working-capital recommendations (sandbox quotes today), and a credit-ready data room.
 
 Module A saves money. Module B saves the business.
 
@@ -17,13 +17,30 @@ Module A saves money. Module B saves the business.
 | `frontend/` | Next.js 14 dashboard (books, forecast, radar, approvals) | Frontend |
 | `backend/` | FastAPI app: auth, REST + SSE API, services, approval engine | Backend/API |
 | `agents/` | LangGraph orchestration: Planner → Executor → Critic → Approval Gate | Orchestration |
-| `tools/` | MCP tool servers: banks/AA, Tally, Zoho, GST/IMS, email, TReDS | Tool layer |
+| `tools/` | MCP tool servers — see *Integration status* below for what's live vs. planned | Tool layer |
 | `memory/` | **Recall memory engine** (vendored copy, FinDesk-tuned) | Memory & Context |
 | `shared/` | Cross-layer types, constants, generated contract models | All (contract-gated) |
 | `contracts/` | Versioned API / tool / memory / DB / event contracts — **source of truth** | Layer owners jointly |
 | `prompts/` | Every LLM prompt in the system (none hardcoded, ever) | Orchestration + Memory |
 | `infra/` | Docker, CI/CD, environments, observability config | Infra & DevOps |
 | `docs/` | Architecture (per-layer deep dives), team process, ADRs | All |
+
+## Integration status
+
+Honesty is a feature. What exists versus what is roadmap:
+
+| Integration | Status | Notes |
+|---|---|---|
+| Bank statements (CSV/XLSX) | **Live** | Real import pipeline (`/books/imports`), exercised in nightly CI |
+| Ledger exports (Tally/Zoho files) | **Live** | File-first parser |
+| Bank debit-alert SMS | **Fixture-tested** | `tools/findesk_tools/sms_alerts` parses HDFC/ICICI/SBI/Axis/Kotak alert templates into the same row shape as the CSV parser, against recorded samples. No carrier or inbox access — nothing reads a real phone. |
+| TallyPrime HTTP-XML gateway | **Fixture-tested** | Real gateway protocol, tested against recorded XML; point it at a running TallyPrime (`localhost:9000`) to go live |
+| Email (chase drafts) | **Sandbox** | Writes `.eml` to a local outbox; refuses without an approval token — identical guardrail surface in prod |
+| TReDS | **Sandbox** | Recommendation quotes only; FinDesk never lists or discounts invoices itself |
+| Account Aggregator (bank feeds) | **Roadmap** | Requires an FIU partnership (regulated-entity gate) — planned via TSP integration |
+| GST IMS (ITC triage) | **Fixture** | Real match→recommend→approve loop over checked-in GSP-shaped records; accept/reject executes only behind the approval gate. Live mode = GSP adapter, roadmap |
+| Udyam verification | **Fixture** | Read-only register lookups; verified category scopes §15/43B(h), drift alerts on tag-vs-register disagreement. Live = IDfy/AuthBridge-class adapter |
+| Zoho Books API, GST portal, e-invoice | **Roadmap** | Contracts reserved in `contracts/tools.md` |
 
 ## Quickstart (dev)
 

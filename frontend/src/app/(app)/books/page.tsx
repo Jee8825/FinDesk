@@ -1,14 +1,29 @@
 "use client";
+// Transactions — "Master table" (wireframe Transactions A): normalized feed,
+// server state chips, per-row Why?, inline category correction, imports.
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
+import { Search, Upload } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-
+import { WhyDrawer } from "@/components/WhyDrawer";
+import {
+  Card,
+  EmptyState,
+  ErrorNote,
+  GhostBtn,
+  PageShell,
+  Pill,
+  PrimaryBtn,
+  Skeleton,
+} from "@/components/ui";
 import { useRunStream } from "@/hooks/useRunStream";
-import { api, formatINR, type ChartAccount, type TxnPage } from "@/lib/api";
+import { api, formatINR, type ChartAccount, type TxnPage, type WhyRef } from "@/lib/api";
 
-const STATUS_STYLES: Record<string, string> = {
-  matched: "bg-emerald-50 text-emerald-700",
-  unmatched: "bg-amber-50 text-amber-700",
+const STATE_TONE: Record<string, "good" | "warn" | "bad" | "neutral"> = {
+  matched: "good",
+  unmatched: "warn",
 };
 
 function CategoryCell({
@@ -24,15 +39,15 @@ function CategoryCell({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["transactions"] }),
   });
 
-  if (txn.direction !== "dr") return <span className="text-slate-300">—</span>;
+  if (txn.direction !== "dr") return <span className="text-line">—</span>;
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1.5">
       <select
         value={txn.category_code ?? ""}
         onChange={(e) => e.target.value && correct.mutate(e.target.value)}
         disabled={correct.isPending}
-        className={`max-w-36 rounded-md border px-1.5 py-0.5 text-xs ${
-          txn.category_code ? "border-slate-200 text-slate-700" : "border-amber-300 text-amber-700"
+        className={`max-w-36 rounded-lg border bg-[var(--fill-2)] px-1.5 py-0.5 text-xs transition-colors ${
+          txn.category_code ? "border-line text-mute" : "border-accent/50 text-accent"
         }`}
         aria-label="expense category"
       >
@@ -44,7 +59,7 @@ function CategoryCell({
         ))}
       </select>
       {txn.category_source && (
-        <span className="text-[10px] uppercase text-slate-400" title="who categorized this">
+        <span className="mono-label text-faint" title="who categorized this">
           {txn.category_source}
         </span>
       )}
@@ -52,21 +67,37 @@ function CategoryCell({
   );
 }
 
-export default function BooksPage() {
+function BooksPageInner() {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
   const onboardInput = useRef<HTMLInputElement>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [onboardNote, setOnboardNote] = useState<string | null>(null);
-  const { events, done } = useRunStream(runId);
+  const [note, setNote] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("all");
+  const [q, setQ] = useState("");
+  const [whyRefs, setWhyRefs] = useState<WhyRef[] | null>(null);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("why");
+    if (id) setWhyRefs([{ kind: "transaction", id }]);
+  }, [searchParams]);
+  const { done } = useRunStream(runId);
 
-  const txns = useQuery({
+  // FE3: cursor pagination for real — the server clamps pages at 500; the
+  // old client never sent the cursor back, dead-ending the list at page one
+  const txns = useInfiniteQuery({
     queryKey: ["transactions"],
-    queryFn: () => api.transactions(),
+    queryFn: ({ pageParam }) => api.transactions(undefined, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
     refetchInterval: runId && !done ? 2000 : false,
   });
+  const allItems = useMemo(
+    () => txns.data?.pages.flatMap((p) => p.items) ?? [],
+    [txns.data],
+  );
   const accounts = useQuery({
     queryKey: ["chart-of-accounts"],
     queryFn: () => api.chartOfAccounts(),
@@ -75,13 +106,11 @@ export default function BooksPage() {
 
   async function onboard(file: File) {
     setError(null);
-    setOnboardNote(null);
+    setNote(null);
     try {
       const r = await api.onboardInvoices(file);
-      setOnboardNote(
-        `Imported ${r.invoices_created} invoices (${r.source_hint}), ` +
-          `${r.counterparties_created} new clients, ` +
-          `${r.observations_seeded} payment behaviors remembered.`,
+      setNote(
+        `Imported ${r.invoices_created} invoices (${r.source_hint}), ${r.counterparties_created} new clients, ${r.observations_seeded} payment behaviors remembered.`,
       );
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
     } catch (err) {
@@ -91,12 +120,31 @@ export default function BooksPage() {
     }
   }
 
+  const tallyPull = useMutation({
+    mutationFn: () => api.tallySync(),
+    onSuccess: (r) => {
+      setError(null);
+      setNote(
+        `Tally pull (${r.mode}): ${r.invoices_created} receivables + ${r.bills_created} payables in, ` +
+          `${r.invoices_updated + r.bills_updated} refreshed, ${r.invoices_skipped + r.bills_skipped} unchanged` +
+          (r.unclassified_vendors > 0
+            ? ` — ${r.unclassified_vendors} vendor(s) need MSME tagging for the Payables Shield.`
+            : "."),
+      );
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["payables"] });
+      queryClient.invalidateQueries({ queryKey: ["radar"] });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "tally pull failed"),
+  });
+
   async function upload(file: File) {
     setError(null);
     setUploading(true);
     try {
       const result = await api.importStatement(file);
       setRunId(result.run_id);
+      setNote("Statement queued — the reconciliation agent is on it. Watch it live in Reconciliation.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "upload failed");
     } finally {
@@ -105,19 +153,35 @@ export default function BooksPage() {
     }
   }
 
-  const counts = txns.data?.counts ?? {};
+  const counts = txns.data?.pages[0]?.counts ?? {};
+  const chips = [
+    { key: "all", label: "All states" },
+    { key: "matched", label: `Matched ${counts.matched ?? 0}` },
+    { key: "unmatched", label: `Exceptions ${counts.unmatched ?? 0}` },
+  ];
+
+  const rows = useMemo(() => {
+    let items = allItems;
+    if (filter !== "all") items = items.filter((t) => t.match_status === filter);
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      items = items.filter(
+        (t) =>
+          t.narration.toLowerCase().includes(needle) ||
+          (t.counterparty_hint ?? "").toLowerCase().includes(needle) ||
+          String(t.amount_paise / 100).includes(needle),
+      );
+    }
+    return items;
+  }, [allItems, filter, q]);
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Books</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Upload a bank statement; the reconciliation agent matches it against open invoices.
-            Rules-only in Phase 1 — anything ambiguous stays for review.
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <PageShell
+      title="Transactions"
+      subtitle="Normalized feed, match states, exception list"
+      annotation="GET /books/transactions?state= · cursor pagination"
+      actions={
+        <>
           <input
             ref={onboardInput}
             type="file"
@@ -125,13 +189,16 @@ export default function BooksPage() {
             className="hidden"
             onChange={(e) => e.target.files?.[0] && onboard(e.target.files[0])}
           />
-          <button
-            onClick={() => onboardInput.current?.click()}
-            className="rounded-md border border-teal-brand px-4 py-2 text-sm font-medium text-teal-brand"
-            title="Tally/Zoho invoice export — seeds payment history into memory"
-          >
+          <GhostBtn onClick={() => onboardInput.current?.click()} title="Tally/Zoho invoice export — seeds payment history into memory">
             Import invoices
-          </button>
+          </GhostBtn>
+          <GhostBtn
+            onClick={() => tallyPull.mutate()}
+            disabled={tallyPull.isPending}
+            title="Pull outstanding receivables + payables through the TallyPrime HTTP-XML connector"
+          >
+            {tallyPull.isPending ? "Pulling…" : "Pull from Tally"}
+          </GhostBtn>
           <input
             ref={fileInput}
             type="file"
@@ -139,123 +206,155 @@ export default function BooksPage() {
             className="hidden"
             onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
           />
-          <button
-            onClick={() => fileInput.current?.click()}
-            disabled={uploading}
-            className="rounded-md bg-teal-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          <PrimaryBtn onClick={() => fileInput.current?.click()} disabled={uploading}>
+            <Upload size={14} /> {uploading ? "Uploading…" : "Upload statement"}
+          </PrimaryBtn>
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search narration, vendor, amount…"
+            className="w-72 rounded-full border border-line bg-[var(--fill-2)] py-2 pl-8 pr-4 text-[13px] shadow-none outline-none transition-colors placeholder:text-faint focus:border-accent/60"
+          />
+        </label>
+        {chips.map((c) => (
+          <motion.button
+            key={c.key}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setFilter(c.key)}
+            className={`rounded-full border px-4 py-1.5 text-[13px] font-semibold transition-colors ${
+              filter === c.key
+                ? "border-ink bg-ink text-cream"
+                : c.key === "unmatched"
+                  ? "border-accent/40 bg-[var(--fill-2)] text-accent"
+                  : "border-line bg-[var(--fill-2)] text-mute hover:border-faint"
+            }`}
           >
-            {uploading ? "Uploading…" : "Upload statement"}
-          </button>
-        </div>
+            {c.label}
+          </motion.button>
+        ))}
+        <span className="mono-annot ml-auto hidden lg:block">◇ state chips = server filter</span>
       </div>
 
-      {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
-      {onboardNote && (
-        <p className="mt-4 rounded-lg bg-teal-brand/10 px-4 py-2 text-sm text-teal-brand">
-          {onboardNote}
-        </p>
-      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <AnimatePresence>
+        {note && (
+          <motion.p
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-4 rounded-xl border border-moss/25 bg-moss/10 px-4 py-2.5 text-sm font-medium text-moss"
+          >
+            {note}
+          </motion.p>
+        )}
+      </AnimatePresence>
 
-      {runId && (
-        <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-medium text-slate-700">
-            Reconciliation run {done ? "— complete" : "— live"}
-          </h2>
-          <ul className="mt-3 space-y-1">
-            {events.map((evt, i) => (
-              <li key={i} className="flex items-center gap-2 text-sm">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    evt.event.startsWith("run.done")
-                      ? "bg-emerald-500"
-                      : evt.status === "finished"
-                        ? "bg-teal-brand"
-                        : evt.status === "failed"
-                          ? "bg-red-500"
-                          : "bg-amber-400"
-                  }`}
-                />
-                <span className="font-mono text-xs text-slate-500">
-                  {evt.name ?? evt.event}
-                </span>
-                <span className="text-slate-600">{evt.summary ?? ""}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="mt-6">
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          <span className="font-medium text-slate-700">Transactions</span>
-          <span>{counts.matched ?? 0} matched</span>
-          <span>·</span>
-          <span>{counts.unmatched ?? 0} for review</span>
+      {txns.isLoading && (
+        <div className="mt-5 space-y-2">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-12" />
+          ))}
         </div>
+      )}
+      {txns.isError && <ErrorNote>Could not load transactions.</ErrorNote>}
+      {txns.data && rows.length === 0 && (
+        <div className="mt-5">
+          <EmptyState hint="dev fixture: scripts/fixtures/statement_apr2026.csv">
+            {q || filter !== "all"
+              ? "Nothing matches this filter."
+              : "No transactions yet — upload a statement to begin."}
+          </EmptyState>
+        </div>
+      )}
 
-        {txns.isLoading && (
-          <div className="mt-3 space-y-2">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-md bg-slate-100" />
-            ))}
-          </div>
-        )}
-        {txns.isError && (
-          <p className="mt-3 text-sm text-red-600">Could not load transactions.</p>
-        )}
-        {txns.data && txns.data.items.length === 0 && (
-          <div className="mt-3 rounded-xl border border-dashed bg-white p-10 text-center text-sm text-slate-500">
-            No transactions yet — upload a statement to begin.
-            <br />
-            Dev fixture: <code>scripts/fixtures/statement_apr2026.csv</code>
-          </div>
-        )}
-        {txns.data && txns.data.items.length > 0 && (
-          <div className="mt-3 overflow-hidden rounded-xl border bg-white shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-2">Date</th>
-                  <th className="px-4 py-2">Narration</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                  <th className="px-4 py-2">Category</th>
-                  <th className="px-4 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {txns.data.items.map((t) => (
-                  <tr key={t.id}>
-                    <td className="px-4 py-2 text-slate-500">{t.value_date}</td>
-                    <td className="max-w-md truncate px-4 py-2" title={t.narration}>
-                      {t.narration}
-                    </td>
-                    <td
-                      className={`px-4 py-2 text-right font-mono ${
-                        t.direction === "cr" ? "text-emerald-700" : "text-slate-700"
-                      }`}
-                    >
-                      {t.direction === "cr" ? "+" : "−"}
-                      {formatINR(t.amount_paise)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <CategoryCell txn={t} accounts={accounts.data ?? []} />
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          STATUS_STYLES[t.match_status] ?? "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {t.match_status}
-                      </span>
-                    </td>
-                  </tr>
+      {rows.length > 0 && (
+        <Card className="mt-5 overflow-x-auto !p-0">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead>
+              <tr className="border-b border-line2 text-left">
+                {["date", "narration (normalized)", "counterparty", "amount", "match state", ""].map((h, i) => (
+                  <th key={i} className={`mono-label px-5 py-3 font-normal text-faint ${h === "amount" ? "text-right" : ""}`}>
+                    {h}
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
+              </tr>
+            </thead>
+            <motion.tbody initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.03 } } }}>
+              {rows.map((t) => (
+                <motion.tr
+                  key={t.id}
+                  variants={{ initial: { opacity: 0 }, animate: { opacity: 1 } }}
+                  className="border-b border-line2 transition-colors last:border-0 hover:bg-[var(--fill-3)]"
+                >
+                  <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-faint">
+                    {t.value_date.slice(5)}
+                  </td>
+                  <td className="max-w-md truncate px-5 py-3 font-medium text-ink" title={t.narration}>
+                    {t.narration}
+                  </td>
+                  <td className="px-5 py-3 font-semibold text-mute">{t.counterparty_hint ?? "—"}</td>
+                  <td
+                    className={`whitespace-nowrap px-5 py-3 text-right font-mono font-semibold ${
+                      t.direction === "cr" ? "text-moss" : "text-ink"
+                    }`}
+                  >
+                    {t.direction === "cr" ? "+" : "−"}
+                    {formatINR(t.amount_paise)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Pill tone={STATE_TONE[t.match_status] ?? "neutral"}>{t.match_status}</Pill>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center justify-end gap-3">
+                      <CategoryCell txn={t} accounts={accounts.data ?? []} />
+                      <button
+                        onClick={() => setWhyRefs([{ kind: "transaction", id: t.id }])}
+                        className="whitespace-nowrap text-[13px] font-bold text-accent transition-transform hover:translate-x-0.5"
+                      >
+                        Why? →
+                      </button>
+                    </div>
+                  </td>
+                </motion.tr>
+              ))}
+            </motion.tbody>
+          </table>
+        </Card>
+      )}
+      {txns.data && (
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <p className="mono-annot">
+            showing {rows.length} of {allItems.length} loaded ·{" "}
+            {Object.values(counts).reduce((a, b) => a + b, 0)} total · {counts.matched ?? 0}{" "}
+            matched · {counts.unmatched ?? 0} for review
+          </p>
+          {txns.hasNextPage && (
+            <button
+              onClick={() => void txns.fetchNextPage()}
+              disabled={txns.isFetchingNextPage}
+              className="mono-label rounded-md border border-line px-3 py-1.5 text-mute transition-colors hover:text-ink disabled:opacity-40"
+            >
+              {txns.isFetchingNextPage ? "loading…" : "load more"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {whyRefs && <WhyDrawer refs={whyRefs} onClose={() => setWhyRefs(null)} />}
+    </PageShell>
+  );
+}
+
+export default function BooksPage() {
+  return (
+    <Suspense fallback={null}>
+      <BooksPageInner />
+    </Suspense>
   );
 }

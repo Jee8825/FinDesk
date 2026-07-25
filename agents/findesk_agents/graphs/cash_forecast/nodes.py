@@ -26,6 +26,7 @@ async def fetch(state: ForecastState) -> dict:
         "opening_balance_paise": ctx["opening_balance_paise"],
         "open_invoices": ctx["open_invoices"],
         "debits": ctx["debits"],
+        "open_bills": ctx.get("open_bills", []),
     }
 
 
@@ -41,16 +42,19 @@ async def recall_behavior(state: ForecastState) -> dict:
         ],
     )
     avg_late: dict[str, float] = {}
+    spread: dict[str, float] = {}
     for cid in client_ids:
         lates = parse_late_days(
             [m.get("content", "") for m in recalled.get(f"client:{cid}", [])]
         )
         if lates:
-            avg_late[cid] = round(sum(lates) / len(lates), 1)
+            stats = engine.behavior_stats(lates)
+            avg_late[cid] = stats["median_late"]  # median: robust to one-offs
+            spread[cid] = stats["spread_days"]
     await state.emitter.step(
         "recall_behavior", "finished", step_id, clients_with_history=len(avg_late)
     )
-    return {"avg_late_by_client": avg_late}
+    return {"avg_late_by_client": avg_late, "spread_by_client": spread}
 
 
 async def projector(state: ForecastState) -> dict:
@@ -63,6 +67,8 @@ async def projector(state: ForecastState) -> dict:
         open_invoices=state.open_invoices,
         avg_late_by_client=state.avg_late_by_client,
         monthly_outflows=monthly_outflows,
+        spread_by_client=state.spread_by_client,
+        open_bills=state.open_bills,
     )
     await state.emitter.step(
         "project",
@@ -73,6 +79,20 @@ async def projector(state: ForecastState) -> dict:
         gap_week=(result["gap"] or {}).get("week"),
     )
     return {"result": result}
+
+
+async def critic_review(state: ForecastState) -> dict:
+    """Critic seat: invariant check between project and persist."""
+    from findesk_agents.graphs.cash_forecast import critic
+
+    step_id = uuid7()
+    await state.emitter.step("critic", "started", step_id)
+    problems = critic.review(state.result)
+    await state.emitter.step("critic", "finished", step_id, violations=len(problems))
+    if problems:
+        # fail the run loudly — a wrong forward view is worse than none
+        raise RuntimeError(f"forecast critic rejected projection: {'; '.join(problems[:3])}")
+    return {}
 
 
 async def persist(state: ForecastState) -> dict:

@@ -8,11 +8,19 @@ from findesk_tools.treds import ListingRefused, SandboxTredsProvider
 def test_quote_math_is_tenor_proportional():
     p = SandboxTredsProvider()
     q = p.quote(invoice_ref="INV-1", amount_paise=40_000_000, tenor_days=38)
-    # 4,00,000 × 18% × 38/365 = ₹7,495.89 → 749,589 paise
-    assert q.cost_paise == round(40_000_000 * 0.18 * 38 / 365)
+    # cost = amount × rate × tenor/365 at the provider's annualized rate
+    assert q.cost_paise == round(40_000_000 * p.rate_bps / 10_000 * 38 / 365)
+    assert q.discount_rate_bps_annual == p.rate_bps
     assert q.unlock_paise == 40_000_000 - q.cost_paise
     shorter = p.quote(invoice_ref="INV-1", amount_paise=40_000_000, tenor_days=10)
     assert shorter.cost_paise < q.cost_paise
+
+
+def test_quote_rate_is_configurable_per_deployment():
+    p = SandboxTredsProvider(rate_bps=1200)
+    q = p.quote(invoice_ref="INV-1", amount_paise=40_000_000, tenor_days=38)
+    assert q.discount_rate_bps_annual == 1200
+    assert q.cost_paise == round(40_000_000 * 0.12 * 38 / 365)
 
 
 def test_listing_refused_without_token(tmp_path):

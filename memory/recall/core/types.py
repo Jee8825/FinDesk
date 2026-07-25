@@ -108,6 +108,7 @@ class PromoteRequest(BaseModel):
     is_orchestrator: bool = Field(
         default=False, description="Required true to promote a memory to global scope."
     )
+    tenant_id: str = "default"
 
 
 class PrefetchRequest(BaseModel):

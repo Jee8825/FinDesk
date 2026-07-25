@@ -13,10 +13,16 @@ def build_graph():
     g.add_node("fetch_overdue", nodes.fetch_overdue)
     g.add_node("draft", nodes.draft)
     g.add_node("queue_approvals", nodes.queue_for_approval)
+    g.add_node("nothing_due", nodes.nothing_due)
     g.add_edge(START, "fetch_overdue")
-    g.add_edge("fetch_overdue", "draft")
+    g.add_conditional_edges(
+        "fetch_overdue",
+        nodes.route_after_fetch,
+        {"draft": "draft", "nothing_due": "nothing_due"},
+    )
     g.add_edge("draft", "queue_approvals")
     g.add_edge("queue_approvals", END)
+    g.add_edge("nothing_due", END)
     return g.compile()
 
 

@@ -119,6 +119,54 @@ async def decide_approval(
     )
 
     result: dict[str, Any] = {"ok": True, "status": decision, "token_id": token_id}
+    if decision == "approved" and approval.action_kind == "ims_set_state":
+        import asyncio
+
+        from findesk_tools.ims import SandboxImsProvider
+        from sqlalchemy import select as _select
+
+        from app.config import get_settings as _get_settings
+        from app.db.models import ImsRecord
+
+        payload = approval.action_payload
+        row = await session.scalar(
+            _select(ImsRecord).where(
+                ImsRecord.id == payload.get("ims_record_id"),
+                ImsRecord.tenant_id == tenant_id,
+            )
+        )
+        if row is None or row.state != "pending":
+            raise ToolExecutionError("IMS record missing or already decided — refresh the queue")
+        # token consumed here: the sandbox refuses without it, identically to
+        # email/TReDS; tool call is sync file I/O → off the event loop
+        try:
+            receipt = await asyncio.to_thread(
+                SandboxImsProvider(_get_settings().ims_actions_dir).set_state,
+                tenant_id=tenant_id,
+                record_key=row.record_key,
+                state=payload["target_state"],
+                approval_token=token_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — abort decision atomically
+            raise ToolExecutionError(f"IMS action failed: {exc}") from exc
+        row.state = payload["target_state"]
+        await write_audit(
+            session,
+            tenant_id=tenant_id,
+            actor={"kind": "user", "id": decider_id},
+            action="ims.state_set",
+            entity_ref=f"ims:{row.id}",
+            payload={
+                "record_key": row.record_key,
+                "doc_number": row.doc_number,
+                "state": row.state,
+                "tax_paise": row.tax_paise,
+                "action_id": receipt.action_id,
+                "approval_id": approval.id,
+                "token_id": token_id,
+            },
+        )
+        result["execution"] = {"state": row.state, "action_id": receipt.action_id}
     if approval.action_kind == "treds_listing":
         from sqlalchemy import select as _select
 

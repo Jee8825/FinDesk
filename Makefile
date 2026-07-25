@@ -1,6 +1,12 @@
-.PHONY: up down dev seed lint test test-int contracts smoke logs
+.PHONY: up down dev dev-up dev-down seed lint test test-int test-e2e contracts smoke logs
 
 # ----- stack -------------------------------------------------------------
+dev-up:        ## working local stack (docker datastores + host venv services) — use this, `up` images are broken
+	./scripts/dev_up.sh
+
+dev-down:      ## stop everything dev-up started
+	./scripts/dev_down.sh
+
 up:            ## full dev stack (app + memory). Override ports via docker-compose.override.yml
 	docker compose -f docker-compose.yml -f memory/docker-compose.yml $(if $(wildcard docker-compose.override.yml),-f docker-compose.override.yml,) up -d --build
 
@@ -32,6 +38,9 @@ test:          ## unit tests, all workspaces
 	  [ -d $$ws/tests/unit ] && (cd $$ws && python -m pytest tests/unit -q) || true; \
 	done
 
+test-e2e:      ## Playwright smoke against the dev stack (`make dev-up` + seed first)
+	cd frontend && npx playwright test
+
 test-int:      ## integration tests (testcontainers)
 	@for ws in backend agents tools memory; do \
 	  [ -d $$ws/tests/integration ] && (cd $$ws && python -m pytest tests/integration -q -m integration) || true; \
@@ -39,6 +48,7 @@ test-int:      ## integration tests (testcontainers)
 
 contracts:     ## regenerate shared/ from contracts/ (CI fails on drift)
 	$(PY) scripts/gen_contracts.py
+	$(PY) scripts/check_api_surface.py
 
 smoke:         ## weekly end-to-end smoke (docs/team/collaboration.md §4)
 	$(PY) scripts/smoke_e2e.py

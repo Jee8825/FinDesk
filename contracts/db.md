@@ -7,8 +7,10 @@
 > (chart_of_accounts + transaction categorization) `0006` (anomaly cards) `0007`
 > (invoice acceptance dates + statutory clocks) `0008` (versioned
 > forecasts + lines) `0009` (working-capital actions) `0010`
-> (enforcer last_enforced_level) and `0011` (hot-path indexes + partial
-> unique committed-match guard) are live. Tables carry the subset of
+> (enforcer last_enforced_level) `0011` (hot-path indexes + partial
+> unique committed-match guard) `0012` (bills — buyer-side payables for
+> §15/43B(h) compliance, mirroring invoices) and `0013` (bills.outstanding_paise
+> — exposure runs on the unpaid portion; source syncs refresh it) are live. Tables carry the subset of
 > columns their shipped features need (e.g. `invoices` gains gst/tds/irn in
 > Phase 3); this file describes the target shape.
 
@@ -19,7 +21,9 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
 `tenant_id` (FK, RLS), `created_at`, `updated_at` (UTC); money `BIGINT` paise.
 
 ## Identity & tenancy
-- **tenants**: name, gstin[], udyam_no?, plan, parent_tenant_id? (multi-entity)
+- **tenants**: name, gstin[], udyam_no?, plan, parent_tenant_id? (multi-entity),
+  gst_filing_frequency `monthly|quarterly` (QRMP) — sets the IMS
+  deemed-acceptance grace window; defaults to `monthly` (the shorter one)
 - **users**: email, password_hash, totp_secret?
 - **memberships**: user_id, tenant_id, role `owner|accountant|ca|viewer`
 - **counterparties**: kind `vendor|client|both`, name, gstin?, msme_status?,
@@ -32,6 +36,19 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
   source jsonb
 - **invoices** / **bills**: counterparty_id, number, issue_date, due_date,
   acceptance_date?, amount_paise, gst jsonb, tds jsonb, irn?, status
+- **ims_records** (`0014`): record_key (unique per tenant —
+  `gstin:doc_type:doc_number`), supplier_gstin, supplier_name, doc_type,
+  doc_number, doc_date, period, taxable_value_paise, tax_paise, total_paise,
+  state `pending|accepted|rejected` (decided is terminal for sync; flips only
+  inside decide_approval), match_tier?, matched_bill_number?,
+  recommendation `accept|review`?, note?
+- **counterparties** (`0016` adds): msme_verified_category?, msme_verified_urn?,
+  msme_verified_at? — Udyam-register verification; verified beats
+  self-declared for 43B(h) scope, human tag never overwritten
+- **payment_promises** (`0015`): invoice_id, promised_date, amount_paise?,
+  status `open|kept|broken` (settled deterministically on recon commit —
+  paid ≤ promised = kept; lateness + outcome written back to Recall via the
+  shared `late_phrase` twin), source `manual|email_reply`, note?
 - **expenses**: counterparty_id?, date, amount_paise, category_code?, document_id?
 - **matches**: bank_transaction_id, target (invoice|bill|expense + id), kind
   `full|partial|fee|tds_adjusted`, confidence numeric, matched_by `agent|human`,
@@ -55,7 +72,9 @@ in the same PR as any migration. Conventions: PK `id UUIDv7`; every table has
 - **forecasts**: version, horizon `4w|13w`, scenario `base|upside|downside`,
   generated_at, run_id
 - **forecast_lines**: forecast_id, week_start, inflow_paise, outflow_paise,
-  closing_paise, drivers jsonb (traceability to invoices/behaviors)
+  closing_paise, drivers jsonb (traceability: inflow drivers carry
+  invoice_number/client; entries with `kind:"out"` are dated vendor bills
+  leaving in that week — absent kind = inflow, pre-existing rows unchanged)
 - **wc_actions**: kind `treds|collect|retime`, unlock_paise, cost_paise,
   detail jsonb, rank, status `proposed|approved|executed|rejected`,
   policy_verdicts jsonb

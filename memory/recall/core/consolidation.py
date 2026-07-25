@@ -40,6 +40,7 @@ class ConsolidationReport:
     compacted: int = 0
     crystallized_beliefs: int = 0
     procedural_created: int = 0
+    dormant_drifted: int = 0
 
 
 def _now() -> datetime:
@@ -104,10 +105,10 @@ async def sweep_tombstones(session: AsyncSession, *, tenant_id: str, settings: S
             )
         )
     ).scalars().all()
+    # The query already excludes crystallized units (status != "active"), so
+    # high-confidence beliefs are inherently protected from the sweep.
     count = 0
     for u in rows:
-        if u.status == "crystallized":
-            continue
         if decay.should_tombstone(
             u.strength, u.decay_lambda, u.strength_updated_at, settings.tombstone_threshold, now
         ):
@@ -125,19 +126,43 @@ async def compact(session: AsyncSession, *, tenant_id: str, retention_days: int 
 
 async def apply_dormancy_and_crystallize(
     session: AsyncSession, *, tenant_id: str, user_id: str, settings: Settings
-) -> int:
-    """Crystallize high-confidence beliefs (pause their decay)."""
+) -> tuple[int, int]:
+    """Drift dormant beliefs down, then crystallize high-confidence ones.
+
+    Returns ``(crystallized, drifted)``.
+
+    For each active semantic belief we first apply :func:`confidence.dormancy_drift`
+    proportional to how many of the user's sessions have elapsed since the belief
+    was last referenced (``last_retrieved_at`` falling back to ``created_at``).
+    Drift happens *before* the crystallization check so a belief that has decayed
+    in trust cannot be frozen on the same pass.
+    """
     units = await repository.list_active_by_user(
         session, user_id=user_id, tenant_id=tenant_id, tier="semantic"
     )
     crystallized = 0
+    drifted = 0
     for u in units:
+        since = u.last_retrieved_at or u.created_at
+        sessions_idle = await repository.count_sessions_since(
+            session,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            since=since,
+            exclude_session=u.last_referenced_session,
+        )
+        if sessions_idle > 0:
+            new_conf = confidence.dormancy_drift(u.confidence, sessions_idle)
+            if new_conf != u.confidence:
+                u.confidence = new_conf
+                drifted += 1
+
         if confidence.is_crystallized(u.confidence, settings.crystallize_threshold):
             # Freeze: mark crystallized and slow decay to the procedural rate.
             u.status = "crystallized"
             u.decay_lambda = settings.decay_lambda("procedural")
             crystallized += 1
-    return crystallized
+    return crystallized, drifted
 
 
 async def crystallize_procedural(
@@ -220,7 +245,7 @@ async def consolidate_user(
     """Run the full consolidation pass for one user."""
     settings = settings or get_settings()
     report = ConsolidationReport()
-    report.crystallized_beliefs = await apply_dormancy_and_crystallize(
+    report.crystallized_beliefs, report.dormant_drifted = await apply_dormancy_and_crystallize(
         session, tenant_id=tenant_id, user_id=user_id, settings=settings
     )
     report.procedural_created = await crystallize_procedural(

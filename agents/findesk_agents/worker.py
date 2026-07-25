@@ -16,7 +16,6 @@ import signal
 from typing import Any
 
 import redis.asyncio as aioredis
-from findesk_shared import uuid7
 
 from findesk_agents.backend_client import BackendClient
 from findesk_agents.config import get_settings
@@ -29,10 +28,14 @@ from findesk_agents.graphs.collections import graph as collections_graph
 from findesk_agents.graphs.collections.state import CollectionsState
 from findesk_agents.graphs.enforcer import graph as enforcer_graph
 from findesk_agents.graphs.enforcer.state import EnforcerState
+from findesk_agents.graphs.month_end_close import graph as close_graph
+from findesk_agents.graphs.month_end_close.state import CloseState
 from findesk_agents.graphs.ping import graph as ping_graph
 from findesk_agents.graphs.ping.state import PingState
 from findesk_agents.graphs.reconciliation import graph as recon_graph
 from findesk_agents.graphs.reconciliation.state import ReconState
+from findesk_agents.graphs.subscription_scan import graph as leak_graph
+from findesk_agents.graphs.subscription_scan.state import SubscriptionState
 from findesk_agents.graphs.working_capital import graph as wc_graph
 from findesk_agents.graphs.working_capital.state import WorkingCapitalState
 from findesk_agents.memoryclient import MemoryClient
@@ -57,6 +60,11 @@ GRAPHS = {
     "job.forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
     "job.cash_forecast.": (forecast_graph, lambda common, payload: ForecastState(**common)),
     "job.working_capital.": (wc_graph, lambda common, payload: WorkingCapitalState(**common)),
+    "job.month_end_close.": (close_graph, lambda common, payload: CloseState(**common)),
+    "job.subscription_scan.": (
+        leak_graph,
+        lambda common, payload: SubscriptionState(**common),
+    ),
     "job.enforcer_tick.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
     "job.enforcer_45day.": (enforcer_graph, lambda common, payload: EnforcerState(**common)),
 }
@@ -106,6 +114,62 @@ async def dispatch(
         await emitter.done("failed", summary=f"{type(exc).__name__}: {str(exc)[:200]}")
 
 
+async def reclaim_pending(
+    redis: aioredis.Redis,
+    settings: Any,
+    backend: BackendClient,
+    memory: MemoryClient,
+    *,
+    handler=dispatch,
+) -> dict[str, int]:
+    """Adopt stale pending entries; dead-letter poison ones.
+
+    At-least-once needs an adoption path: an entry delivered to a worker that
+    died before XACK sits in the group's PEL forever unless someone reclaims
+    it. Entries idle past ``worker_reclaim_idle_ms`` are claimed here; anything
+    already delivered ``worker_max_deliveries`` times is poison — it goes to
+    the dead stream (operator visibility) and its run is marked failed, so the
+    UI never shows an eternal spinner.
+    """
+    stream = settings.jobs_stream_interactive
+    group = settings.jobs_consumer_group
+    counts = {"retried": 0, "dead": 0}
+    pending = await redis.xpending_range(
+        stream, group, min="-", max="+", count=32, idle=settings.worker_reclaim_idle_ms
+    )
+    for p in pending:
+        entry_id = p["message_id"]
+        deliveries = int(p["times_delivered"])
+        claimed = await redis.xclaim(
+            stream,
+            group,
+            settings.worker_consumer_name,
+            min_idle_time=settings.worker_reclaim_idle_ms,
+            message_ids=[entry_id],
+        )
+        for cid, msg in claimed:
+            if deliveries >= settings.worker_max_deliveries:
+                await redis.xadd(
+                    settings.jobs_dead_stream,
+                    {**msg, "dead_reason": f"exceeded {deliveries} deliveries"},
+                )
+                run_id = msg.get("run_id", "")
+                tenant_id = msg.get("tenant_id", "")
+                if run_id and tenant_id:
+                    emitter = RedisEventEmitter(redis, tenant_id=tenant_id, run_id=run_id)
+                    await emitter.done(
+                        "failed", summary=f"dead-lettered after {deliveries} deliveries"
+                    )
+                counts["dead"] += 1
+            else:
+                await handler(redis, msg, backend, memory)
+                counts["retried"] += 1
+            await redis.xack(stream, group, cid)
+    if counts["retried"] or counts["dead"]:
+        log.info("reclaimed pending: %s", counts)
+    return counts
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = get_settings()
@@ -122,10 +186,15 @@ async def main() -> None:
 
     backend = BackendClient()
     memory = MemoryClient()
-    consumer = f"worker-{uuid7()[:8]}"
+    consumer = settings.worker_consumer_name
     log.info("worker %s consuming %s", consumer, settings.jobs_stream_interactive)
+    last_reclaim = 0.0
     while not stop.is_set():
         try:
+            now = loop.time()
+            if now - last_reclaim >= settings.worker_reclaim_every_s:
+                last_reclaim = now
+                await reclaim_pending(redis, settings, backend, memory)
             batches = await redis.xreadgroup(
                 settings.jobs_consumer_group,
                 consumer,

@@ -168,7 +168,12 @@ async def critic(state: ReconState) -> dict:
         ]
         prompt = render_prompt(
             "agents/critic@v1",
-            proposals=json.dumps([p for _, p in passes], default=str),
+            proposals=json.dumps(
+                matching.evidence_for_review(
+                    [p for _, p in passes], state.context.get("unmatched", [])
+                ),
+                default=str,
+            ),
             counterparties=json.dumps(state.context.get("counterparties", [])),
         )
         result = await llm.complete_json(prompt)
@@ -194,6 +199,37 @@ async def critic(state: ReconState) -> dict:
         "critic", "finished", step_id, reviewed=len(reviewed), passed=passed, checker=checker
     )
     return {"proposals": reviewed}
+
+
+def route_after_critic(state: ReconState) -> str:
+    """Post what survived, or explain what didn't. The graph's one real choice."""
+    return "commit" if matching.any_committable(state.proposals) else "escalate"
+
+
+async def escalate(state: ReconState) -> dict:
+    """Nothing survived the critic — surface *why* instead of dropping it.
+
+    Reached when every proposal was vetoed, or when there was nothing to match
+    at all. Both cases previously walked commit → learn to do nothing and then
+    reported a summary implying routine success. Here the critic's reasoning
+    becomes run evidence (the Run Viewer renders step detail), and the summary
+    says what actually happened.
+    """
+    step_id = uuid7()
+    await state.emitter.step("escalate", "started", step_id)
+    vetoed = matching.vetoed_with_reasons(state.proposals)
+    left = len(state.context.get("unmatched", []))
+    inserted = state.ingested.get("inserted", 0)
+    await state.emitter.step(
+        "escalate", "finished", step_id, vetoed=len(vetoed), findings=vetoed
+    )
+    summary = (
+        f"{inserted} new transactions; nothing posted — {len(vetoed)} proposal(s) "
+        f"vetoed by the critic; {left} left for review"
+        if vetoed
+        else f"{inserted} new transactions; no match candidates; {left} left for review"
+    )
+    return {"summary": summary}
 
 
 async def commit(state: ReconState) -> dict:

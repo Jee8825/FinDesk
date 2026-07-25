@@ -30,6 +30,32 @@ LEXICON: list[tuple[re.Pattern[str], str, float]] = [
         "software_cloud",
         0.92,
     ),
+    # Consumer categories sit ABOVE the generic SUBSCRIPTION rule because first
+    # hit wins — "NETFLIX PREMIUM SUBSCRIPTION" is streaming, not software_cloud.
+    # Needed for LeakRadar's personal mode; harmless for business books, where
+    # these vendors simply do not appear.
+    (
+        re.compile(
+            r"NETFLIX|HOTSTAR|DISNEY|PRIME VIDEO|SONYLIV|ZEE5|JIOCINEMA"
+            r"|YOUTUBE PREMIUM|SPOTIFY|GAANA|WYNK|APPLE MUSIC|AUDIBLE",
+            re.I,
+        ),
+        "streaming",
+        0.9,
+    ),
+    (
+        re.compile(r"GOOGLE ONE|ICLOUD|DROPBOX|ONEDRIVE|BACKBLAZE", re.I),
+        "cloud_storage",
+        0.9,
+    ),
+    (
+        re.compile(r"AIRTEL|\bJIO\b|VODAFONE|\bVI POSTPAID\b|BSNL|POSTPAID", re.I),
+        "telecom",
+        0.88,
+    ),
+    (re.compile(r"CULT ?FIT|GYM|FITNESS|HEALTHIFY", re.I), "fitness", 0.88),
+    (re.compile(r"\bLIC\b|INSURANCE|POLICYBAZAAR|PREMIUM DEBIT", re.I), "insurance", 0.9),
+    (re.compile(r"HOME LOAN|LOAN EMI|\bEMI\b|CAR LOAN", re.I), "loan_emi", 0.92),
     (re.compile(r"SAAS|SUBSCRIPTION|ZOHO|GITHUB|SLACK|NOTION|FIGMA", re.I), "software_cloud", 0.88),
     (re.compile(r"SALARY|PAYROLL|STAFF BATCH|WAGES", re.I), "payroll", 0.95),
     (re.compile(r"RENT\b|WEWORK|AWFIS|COWORK", re.I), "rent", 0.92),

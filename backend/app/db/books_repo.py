@@ -12,6 +12,7 @@ from app.db.models import (
     AuditLog,
     BankAccount,
     BankTransaction,
+    Bill,
     ChartAccount,
     Counterparty,
     Document,
@@ -173,6 +174,14 @@ class BooksRepo:
             )
         )
 
+    # ---- bills (payables) --------------------------------------------------
+    async def open_bills(self, tenant_id: str) -> list[Bill]:
+        return list(
+            await self.session.scalars(
+                select(Bill).where(Bill.tenant_id == tenant_id, Bill.status == "open")
+            )
+        )
+
     async def invoice(self, invoice_id: str, tenant_id: str) -> Invoice | None:
         return await self.session.scalar(
             select(Invoice).where(Invoice.id == invoice_id, Invoice.tenant_id == tenant_id)
@@ -229,5 +238,26 @@ class BooksRepo:
                 select(AuditLog)
                 .where(AuditLog.tenant_id == tenant_id, AuditLog.entity_ref == entity_ref)
                 .order_by(AuditLog.created_at)
+            )
+        )
+
+    async def audit_for_entities(self, tenant_id: str, entity_refs: list[str]) -> list[AuditLog]:
+        if not entity_refs:
+            return []
+        return list(
+            await self.session.scalars(
+                select(AuditLog)
+                .where(AuditLog.tenant_id == tenant_id, AuditLog.entity_ref.in_(entity_refs))
+                .order_by(AuditLog.created_at)
+            )
+        )
+
+    async def matches_for_transaction(self, tenant_id: str, txn_id: str) -> list[Match]:
+        return list(
+            await self.session.scalars(
+                select(Match).where(
+                    Match.tenant_id == tenant_id,
+                    Match.bank_transaction_id == txn_id,
+                )
             )
         )

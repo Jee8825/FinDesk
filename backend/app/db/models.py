@@ -40,6 +40,16 @@ class Tenant(TimestampedTenanted, Base):
 
     name: Mapped[str] = mapped_column(String(200))
     plan: Mapped[str] = mapped_column(String(20), default="startup")
+    # monthly|quarterly — sets the IMS deemed-acceptance grace window. Defaults
+    # to the shorter one so an unconfigured tenant is warned early, not late.
+    gst_filing_frequency: Mapped[str] = mapped_column(
+        String(10), default="monthly", server_default="monthly"
+    )
+    # business|personal — selects LeakRadar's exclusion list. A business book
+    # must never rank payroll as a leak; a personal one must never rank an EMI.
+    leak_mode: Mapped[str] = mapped_column(
+        String(10), default="business", server_default="business"
+    )
 
 
 class User(TimestampedTenanted, Base):
@@ -92,6 +102,14 @@ class Counterparty(TimestampedTenanted, Base):
     name: Mapped[str] = mapped_column(String(200))
     gstin: Mapped[str | None] = mapped_column(String(15), nullable=True)
     msme_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Udyam-register verification (F4): the verified category — when present —
+    # beats the self-declared tag for §15/43B(h) scoping; the human tag is
+    # never overwritten, both are shown
+    msme_verified_category: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    msme_verified_urn: Mapped[str | None] = mapped_column(String(25), nullable=True)
+    msme_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     contacts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
@@ -149,6 +167,77 @@ class Invoice(TimestampedTenanted, Base):
     acceptance_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class Bill(TimestampedTenanted, Base):
+    """A payable we owe a vendor — the 43B(h)/§15 buyer-side mirror of Invoice."""
+
+    __tablename__ = "bills"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    counterparty_id: Mapped[str] = mapped_column(ForeignKey("counterparties.id"), index=True)
+    number: Mapped[str] = mapped_column(String(50))
+    issue_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_paise: Mapped[int] = mapped_column(BigInteger)  # original bill amount
+    # unpaid portion — §16 interest and 43B(h) exposure run on THIS, not the
+    # original; source syncs (Tally) update it on re-pull
+    outstanding_paise: Mapped[int] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|paid
+    # MSME Act day-zero; falls back to issue_date when not recorded
+    acceptance_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class PaymentPromise(TimestampedTenanted, Base):
+    """A client's promise-to-pay on one receivable (F3 outcome loop).
+
+    Settlement classifies it kept/broken deterministically when recon marks
+    the invoice paid; both the lateness and the promise outcome are written
+    back to Recall so the forecast's recalled behavior stays live, not
+    seed-only.
+    """
+
+    __tablename__ = "payment_promises"
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), index=True)
+    promised_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount_paise: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default="open", index=True)  # open|kept|broken
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+class ImsRecord(TimestampedTenanted, Base):
+    """A supplier-filed document in the tenant's GST IMS queue (F1).
+
+    Sync is upsert-by-record_key; a decided state (accepted/rejected) is
+    terminal for sync — re-pulls refresh pending rows only, mirroring the
+    bills 'paid is terminal' rule. State changes execute only inside
+    decide_approval with a minted token.
+    """
+
+    __tablename__ = "ims_records"
+    __table_args__ = (UniqueConstraint("tenant_id", "record_key", name="uq_ims_tenant_key"),)
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    record_key: Mapped[str] = mapped_column(String(120))  # gstin:doc_type:number
+    supplier_gstin: Mapped[str] = mapped_column(String(15))
+    supplier_name: Mapped[str] = mapped_column(String(200))
+    doc_type: Mapped[str] = mapped_column(String(12), default="invoice")
+    doc_number: Mapped[str] = mapped_column(String(50))
+    doc_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period: Mapped[str] = mapped_column(String(7))  # e.g. "2026-07"
+    taxable_value_paise: Mapped[int] = mapped_column(BigInteger)
+    tax_paise: Mapped[int] = mapped_column(BigInteger)  # the ITC at stake
+    total_paise: Mapped[int] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    match_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    matched_bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    recommendation: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class Match(TimestampedTenanted, Base):
@@ -272,6 +361,65 @@ class Anomaly(TimestampedTenanted, Base):
     status: Mapped[str] = mapped_column(String(12), default="open", index=True)
     decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), unique=True)  # stable across rescans
+
+
+class Subscription(TimestampedTenanted, Base):
+    """A recurring vendor series — LeakRadar's unit of work.
+
+    Distinct in grain from ``Anomaly``: an anomaly is a finding about one
+    transaction, a subscription is a *series* with a lifecycle (active →
+    drifted → stopped). Upsert-by-vendor_slug, so a rescan refreshes rather
+    than duplicates, and ``usage`` survives rescans because it is the one field
+    a human owns.
+    """
+
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "vendor_slug", name="uq_subscription_tenant_vendor"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(ForeignKey("tenants.id"), index=True)
+    vendor_slug: Mapped[str] = mapped_column(String(120))
+    vendor_label: Mapped[str] = mapped_column(String(120))
+    category_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    cadence: Mapped[str] = mapped_column(String(14), index=True)
+    period_days: Mapped[int] = mapped_column(Integer, default=0)
+    periods_per_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, default=0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_expected: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(10), default="active", index=True)
+
+    amount_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    latest_amount_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    run_rate_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    drift_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    drift_paise_per_year: Mapped[int] = mapped_column(BigInteger, default=0)
+    duplicate_paise: Mapped[int] = mapped_column(BigInteger, default=0)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    leak_score: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    score_components: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    recoverable_paise_per_year: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    reason: Mapped[str] = mapped_column(String(400), default="")
+    recommended_action: Mapped[str] = mapped_column(String(300), default="")
+    narrative: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    # LLM-written {subject, body, kind} for the approval draft; produced by the
+    # scan (never in a request handler) and always human-approved before sending
+    draft: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    # the one field a human owns: in_use | unused | None (never asked)
+    usage: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    usage_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Conflict(TimestampedTenanted, Base):

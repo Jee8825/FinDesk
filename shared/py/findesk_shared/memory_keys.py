@@ -37,6 +37,13 @@ def vendor_scope(hint: str | None, narration: str = "") -> str:
 _LATE_RE = re.compile(r"paid\s+(\d+)\s+days?\s+(late|early)")
 
 
+def late_phrase(delta_days: int) -> str:
+    """Write-side twin of parse_late_days — every learn path builds its
+    payment-timing claims through this so writer and parser cannot drift.
+    0 renders as "0 days early" (parses back to 0)."""
+    return f"{delta_days} days late" if delta_days > 0 else f"{-delta_days} days early"
+
+
 def parse_late_days(contents: list[str]) -> list[int]:
     """Extract payment-timing observations from memory claim texts.
 

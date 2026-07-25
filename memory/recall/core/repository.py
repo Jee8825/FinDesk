@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from recall.core.types import Scope, Tier
@@ -34,6 +34,7 @@ async def insert_memory(
     team_id: str | None,
     cluster: str | None,
     source_session_id: str | None,
+    corroboration_count: int = 0,
 ) -> MemoryUnit:
     unit = MemoryUnit(
         user_id=user_id,
@@ -47,6 +48,7 @@ async def insert_memory(
         team_id=team_id,
         cluster=cluster,
         source_session_id=source_session_id,
+        corroboration_count=corroboration_count,
         strength=1.0,
         strength_updated_at=_now(),
     )
@@ -57,6 +59,16 @@ async def insert_memory(
 
 async def get_memory(session: AsyncSession, memory_id: uuid.UUID) -> MemoryUnit | None:
     return await session.get(MemoryUnit, memory_id)
+
+
+async def get_memory_scoped(
+    session: AsyncSession, memory_id: uuid.UUID, *, tenant_id: str
+) -> MemoryUnit | None:
+    """Fetch a memory only if it belongs to ``tenant_id`` (cross-tenant guard)."""
+    stmt = select(MemoryUnit).where(
+        MemoryUnit.id == memory_id, MemoryUnit.tenant_id == tenant_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 async def search_similar(
@@ -128,18 +140,27 @@ async def list_semantic_for_user(
 
 
 async def apply_reinforcement(
-    session: AsyncSession, memory_id: uuid.UUID, new_strength: float
+    session: AsyncSession,
+    memory_id: uuid.UUID,
+    new_strength: float,
+    *,
+    session_id: str | None = None,
 ) -> None:
-    """Persist a reinforced strength and refresh the decay clock + retrieval stats."""
+    """Persist a reinforced strength and refresh the decay clock + retrieval stats.
+
+    When ``session_id`` is supplied, the referencing session is recorded so the
+    dormancy pass can tell how many sessions a belief has gone un-recalled.
+    """
+    values: dict = {
+        "strength": new_strength,
+        "strength_updated_at": _now(),
+        "last_retrieved_at": _now(),
+        "retrieval_count": MemoryUnit.retrieval_count + 1,
+    }
+    if session_id is not None:
+        values["last_referenced_session"] = session_id
     await session.execute(
-        update(MemoryUnit)
-        .where(MemoryUnit.id == memory_id)
-        .values(
-            strength=new_strength,
-            strength_updated_at=_now(),
-            last_retrieved_at=_now(),
-            retrieval_count=MemoryUnit.retrieval_count + 1,
-        )
+        update(MemoryUnit).where(MemoryUnit.id == memory_id).values(**values)
     )
 
 
@@ -150,13 +171,20 @@ async def set_status(session: AsyncSession, memory_id: uuid.UUID, status: str) -
 
 
 async def update_scope(
-    session: AsyncSession, memory_id: uuid.UUID, scope: Scope, team_id: str | None
-) -> None:
-    await session.execute(
+    session: AsyncSession,
+    memory_id: uuid.UUID,
+    scope: Scope,
+    team_id: str | None,
+    *,
+    tenant_id: str,
+) -> int:
+    """Re-scope a memory, scoped to its tenant. Returns rows affected (0 = denied)."""
+    result = await session.execute(
         update(MemoryUnit)
-        .where(MemoryUnit.id == memory_id)
+        .where(MemoryUnit.id == memory_id, MemoryUnit.tenant_id == tenant_id)
         .values(scope=scope, team_id=team_id)
     )
+    return result.rowcount or 0
 
 
 async def list_user_owned(
@@ -170,10 +198,19 @@ async def list_user_owned(
     return list((await session.execute(stmt)).scalars().all())
 
 
-async def delete_memory(session: AsyncSession, memory_id: uuid.UUID) -> None:
+async def delete_memory(
+    session: AsyncSession, memory_id: uuid.UUID, *, tenant_id: str | None = None
+) -> bool:
+    """Delete a memory. When ``tenant_id`` is given, only a same-tenant row is
+    removed (cross-tenant deletes are denied). Returns whether a row was deleted.
+    """
     unit = await session.get(MemoryUnit, memory_id)
-    if unit is not None:
-        await session.delete(unit)
+    if unit is None:
+        return False
+    if tenant_id is not None and unit.tenant_id != tenant_id:
+        return False
+    await session.delete(unit)
+    return True
 
 
 # --------------------------- consolidation helpers ---------------------------
@@ -233,6 +270,32 @@ async def list_by_cluster(
         .limit(limit)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def count_sessions_since(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    tenant_id: str,
+    since: datetime,
+    exclude_session: str | None = None,
+) -> int:
+    """Count distinct sessions this user has had since ``since``.
+
+    Used by the dormancy pass as the "sessions idle" signal: how many new
+    conversations occurred without a given belief being recalled. Derived from
+    ``source_session_id`` of the user's memory units (every ingest stamps it),
+    so it needs no separate session-tracking table.
+    """
+    stmt = select(func.count(distinct(MemoryUnit.source_session_id))).where(
+        MemoryUnit.tenant_id == tenant_id,
+        MemoryUnit.user_id == user_id,
+        MemoryUnit.source_session_id.is_not(None),
+        MemoryUnit.created_at > since,
+    )
+    if exclude_session is not None:
+        stmt = stmt.where(MemoryUnit.source_session_id != exclude_session)
+    return int((await session.execute(stmt)).scalar_one() or 0)
 
 
 async def hard_delete_tombstoned_before(

@@ -25,6 +25,25 @@ async def fetch_overdue(state: CollectionsState) -> dict:
     return {"overdue": context["overdue"], "sender_name": context["sender_name"]}
 
 
+def route_after_fetch(state: CollectionsState) -> str:
+    """Nothing overdue is a real outcome, not a zero-row pass through the mill."""
+    return "draft" if state.overdue else "nothing_due"
+
+
+async def nothing_due(state: CollectionsState) -> dict:
+    """Clean ledger: skip the recall fan-out and the queue call entirely.
+
+    Not intelligence — a guard. Worth a branch anyway: the draft node issues one
+    memory query per client before it discovers it has no clients, and the old
+    summary ("0 overdue invoices; 0 chaser drafts awaiting approval") read like
+    a degraded run rather than a clean one.
+    """
+    step_id = uuid7()
+    await state.emitter.step("nothing_due", "started", step_id)
+    await state.emitter.step("nothing_due", "finished", step_id, overdue=0)
+    return {"queued": 0, "summary": "No overdue invoices — nothing to chase."}
+
+
 async def draft(state: CollectionsState) -> dict:
     step_id = uuid7()
     await state.emitter.step("draft", "started", step_id)

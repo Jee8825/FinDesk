@@ -17,7 +17,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+# LeakRadar seeding parses a statement with the real tool and categorizes with
+# the agents' own lexicon, so the seed can never disagree with a real run.
+sys.path.insert(0, str(ROOT / "agents"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from datetime import UTC, datetime, timedelta  # noqa: E402
 
@@ -28,6 +33,7 @@ from app.auth.security import hash_password  # noqa: E402
 from app.db import dispose_engine, session_scope  # noqa: E402
 from app.db.models import (  # noqa: E402
     BankAccount,
+    Bill,
     ChartAccount,
     Counterparty,
     Invoice,
@@ -52,6 +58,23 @@ CLIENTS = [
     "Devans South Traders",
 ]
 VENDORS = ["AWS India", "WeWork BKC"]
+
+# Buyer-side 43B(h) demo: registered-MSE vendors whose open bills run the §15
+# clock against *us*. (name, msme_status)
+MSE_VENDORS = [
+    ("Sundaram Packaging", "micro"),
+    ("Kaveri Print Works", "small"),
+]
+
+# (vendor, number, amount_paise, issue_date) — §15 clock runs from issue
+# (acceptance defaults to issue). Dates crafted for the three bands:
+# breached (>45d), closing (<7d left), within (fresh).
+BILLS = [
+    ("Sundaram Packaging", "PB-2026-889", 5_230_000, "2026-05-20"),  # breached
+    ("Kaveri Print Works", "PB-2026-014", 2_140_000, "2026-06-10"),  # closing
+    ("Sundaram Packaging", "PB-2026-902", 7_800_000, "2026-07-10"),  # within
+    ("AWS India", "PB-2026-777", 1_650_000, "2026-07-01"),  # non-MSE — excluded
+]
 
 # (client, number, amount_paise, issue_date) — due = issue + 30d.
 # Amounts pair with scripts/fixtures/statement_apr2026.csv (see module docstring).
@@ -101,6 +124,125 @@ async def ensure_identity(session) -> str:
     session.add(Membership(user_id=user.id, tenant_id=tenant.id, role="owner"))
     print(f"seeded tenant {tenant.name!r} + owner {DEMO_EMAIL} / {DEMO_PASSWORD}")
     return tenant.id
+
+
+SECOND_TENANT = "Meridian Textiles Co"
+
+
+async def ensure_second_tenant(session) -> str | None:
+    """A second client tenant on the same login — makes the CA roster and the
+    explicit tenant-switch flow demoable (one CA, many clients)."""
+    users = UserRepo(session)
+    user = await users.by_email(DEMO_EMAIL)
+    if user is None:
+        return None
+    memberships = await users.memberships(user.id)
+    if len(memberships) > 1:
+        return memberships[1].tenant_id
+    tenant = Tenant(id=uuid7(), name=SECOND_TENANT, plan="startup")
+    session.add(tenant)
+    await session.flush()
+    session.add(Membership(user_id=user.id, tenant_id=tenant.id, role="ca"))
+    print(f"seeded second tenant {SECOND_TENANT!r} (role ca) for {DEMO_EMAIL}")
+    return tenant.id
+
+
+# --------------------------------------------------------------- LeakRadar
+# Two dedicated tenants so LeakRadar demos on CLEAN data. The main demo tenant
+# carries invoices, bills, IMS records and its own statements; dropping 75 more
+# debits into it drags AWS from monthly to irregular and pushes older
+# transactions out of the command palette's first page. Separate tenants also
+# make dual-mode demoable side by side, which is the point of having two modes.
+
+LEAK_TENANTS = (
+    ("LeakRadar Demo — Business", "business", "leakradar_business.csv", "XX7788"),
+    ("LeakRadar Demo — Personal", "personal", "leakradar_personal.csv", "XX9911"),
+)
+
+
+async def ensure_leak_tenants(session) -> list[str]:
+    """Idempotent: creates each tenant, its bank account, and its debits."""
+    from findesk_tools.bank_statements import parse_statement
+
+    from app.db.models import BankTransaction
+
+    users = UserRepo(session)
+    user = await users.by_email(DEMO_EMAIL)
+    if user is None:
+        return []
+
+    created: list[str] = []
+    for name, mode, fixture, account_ref in LEAK_TENANTS:
+        existing = await session.scalar(select(Tenant).where(Tenant.name == name))
+        if existing is not None:
+            print(f"leak tenant {name!r} already present")
+            created.append(existing.id)
+            continue
+
+        path = ROOT / "scripts" / "fixtures" / fixture
+        if not path.exists():
+            print(f"!! missing {fixture} — run scripts/make_leak_fixtures.py")
+            continue
+
+        # parent first, then flush: a single add_all does not guarantee insert
+        # order, so the bank account's FK to tenants can hit an absent row
+        tenant = Tenant(id=uuid7(), name=name, plan="startup", leak_mode=mode)
+        session.add(tenant)
+        await session.flush()
+
+        account = BankAccount(
+            id=uuid7(),
+            tenant_id=tenant.id,
+            bank="Demo Bank",
+            account_ref=account_ref,
+            source="upload",
+        )
+        session.add_all(
+            [account, Membership(user_id=user.id, tenant_id=tenant.id, role="owner")]
+        )
+        await session.flush()
+
+        result = parse_statement(path.read_text(encoding="utf-8"))
+        rows = 0
+        for txn in result.transactions:
+            if txn.direction != "dr":
+                continue
+            session.add(
+                BankTransaction(
+                    id=uuid7(),
+                    tenant_id=tenant.id,
+                    bank_account_id=account.id,
+                    external_ref=txn.external_ref,
+                    value_date=txn.value_date,
+                    amount_paise=txn.amount_paise,
+                    direction="dr",
+                    narration=txn.narration,
+                    counterparty_hint=txn.counterparty_hint,
+                    dedupe_hash=txn.dedupe_hash(),
+                    source={"kind": "bank_statement", "external_id": fixture},
+                    category_code=_leak_category(txn.narration),
+                    category_source="rule",
+                )
+            )
+            rows += 1
+        await session.flush()
+        print(f"seeded {name!r} ({mode}) — {rows} debits from {fixture}")
+        created.append(tenant.id)
+    return created
+
+
+def _leak_category(narration: str) -> str | None:
+    """Categorize at seed time using the agents' own lexicon.
+
+    Imported through the real categorizer rather than a copy, so the seed can
+    never disagree with what a reconciliation run would assign.
+    """
+    from findesk_agents.graphs.reconciliation.categorization import LEXICON
+
+    for pattern, code, _confidence in LEXICON:
+        if pattern.search(narration):
+            return code
+    return None
 
 
 async def ensure_books(session, tenant_id: str) -> None:
@@ -202,6 +344,50 @@ async def ensure_chart(session, tenant_id: str) -> None:
     print(f"seeded {len(CHART_OF_ACCOUNTS)} chart-of-accounts entries")
 
 
+async def ensure_bills(session, tenant_id: str) -> None:
+    """Idempotently add MSE vendors + open payable bills (43B(h) demo)."""
+    parties = {
+        c.name: c
+        for c in (
+            await session.scalars(
+                select(Counterparty).where(Counterparty.tenant_id == tenant_id)
+            )
+        )
+    }
+    for name, msme_status in MSE_VENDORS:
+        if name in parties:
+            if parties[name].msme_status != msme_status:
+                parties[name].msme_status = msme_status
+            continue
+        vendor = Counterparty(
+            id=uuid7(), tenant_id=tenant_id, kind="vendor", name=name, msme_status=msme_status
+        )
+        session.add(vendor)
+        parties[name] = vendor
+    await session.flush()
+    for vendor_name, number, amount_paise, issue in BILLS:
+        exists = await session.scalar(
+            select(Bill).where(Bill.tenant_id == tenant_id, Bill.number == number)
+        )
+        if exists is not None or vendor_name not in parties:
+            continue
+        issue_dt = datetime.fromisoformat(issue).replace(tzinfo=UTC)
+        session.add(
+            Bill(
+                id=uuid7(),
+                tenant_id=tenant_id,
+                counterparty_id=parties[vendor_name].id,
+                number=number,
+                issue_date=issue_dt,
+                due_date=issue_dt + timedelta(days=45),
+                amount_paise=amount_paise,
+                outstanding_paise=amount_paise,
+                status="open",
+            )
+        )
+        print(f"seeded bill {number}")
+
+
 async def ensure_late_invoices(session, tenant_id: str) -> None:
     """Idempotently add invoices introduced after the initial books seed."""
     parties = {
@@ -241,8 +427,15 @@ async def main() -> None:
         await ensure_books(session, tenant_id)
         await session.flush()
         await ensure_late_invoices(session, tenant_id)
+        await ensure_bills(session, tenant_id)
         await ensure_chart(session, tenant_id)
         await ensure_contacts(session, tenant_id)
+        second_id = await ensure_second_tenant(session)
+        if second_id:
+            await session.flush()
+            await ensure_chart(session, second_id)  # empty books, real chart
+        for leak_id in await ensure_leak_tenants(session):
+            await ensure_chart(session, leak_id)
     await dispose_engine()
 
 
