@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Mirrors this repo to the hackathon remote every 2 hours.
+
+  Install:    cp scripts/ops/com.findesk.mirror-push.plist ~/Library/LaunchAgents/
+              launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.findesk.mirror-push.plist
+  Run now:    launchctl kickstart -k gui/$(id -u)/com.findesk.mirror-push
+  Stop:       launchctl bootout gui/$(id -u)/com.findesk.mirror-push
+  Logs:       var/mirror-push.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.findesk.mirror-push</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/Jee/Hackathon/FInDesk/scripts/ops/mirror_push.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/Jee/Hackathon/FInDesk</string>
+
+    <!-- Every 2 hours. Fires on load, then on a 7200s cadence. -->
+    <key>StartInterval</key>
+    <integer>7200</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/Jee/Hackathon/FInDesk/var/mirror-push.launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Jee/Hackathon/FInDesk/var/mirror-push.launchd.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
