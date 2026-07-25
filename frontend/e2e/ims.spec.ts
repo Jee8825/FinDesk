@@ -57,7 +57,9 @@ test("command palette reaches the ims shield", async ({ page }) => {
     timeout: 10_000,
   });
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/ims/);
+  // Playwright runs spec files in parallel and leaks.spec drives a ~30s agent
+  // scan, so client-side navigation can take well over the 5s default here.
+  await expect(page).toHaveURL(/\/ims/, { timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "IMS · ITC Shield" })).toBeVisible();
 });
 

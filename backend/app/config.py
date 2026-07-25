@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +50,24 @@ class Settings(BaseSettings):
     # refuses to construct until one exists.
     ims_mode: str = "fixture"  # fixture | live
     ims_actions_dir: str = "var/ims"  # sandbox set_state receipts
+
+
+    @field_validator("app_database_url")
+    @classmethod
+    def _async_driver(cls, value: str) -> str:
+        """Accept the plain URL every managed Postgres hands out.
+
+        Render, Neon, Supabase and Heroku all emit `postgres://` or
+        `postgresql://`, but this app runs an async engine and needs the
+        `+asyncpg` driver. Rewriting here rather than asking every deployment to
+        hand-edit its own connection string — and it keeps alembic and the
+        engine in agreement, since both read this one setting.
+        """
+        if value.startswith("postgres://"):
+            value = "postgresql://" + value[len("postgres://") :]
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value[len("postgresql://") :]
+        return value
 
 
 @lru_cache

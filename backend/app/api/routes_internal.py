@@ -873,6 +873,8 @@ async def persist_close_run(
 class LeakContext(BaseModel):
     debits: list[dict[str, Any]]
     mode: str
+    # vendor_slug -> "in_use" | "unused", as recorded by POST /leaks/{id}/usage
+    usage: dict[str, str] = {}
 
 
 @router.get("/leaks/context", response_model=LeakContext)
@@ -886,14 +888,30 @@ async def leak_context(
     change verdicts.
     """
     _check_token(x_internal_token)
-    from app.db.models import Tenant
+    from sqlalchemy import select as _select
+
+    from app.db.models import Subscription, Tenant
 
     async with session_scope() as session:
         debits = await BooksRepo(session).debit_transactions(tenant_id)
         tenant = await session.get(Tenant, tenant_id)
         mode = (tenant.leak_mode if tenant else None) or "business"
+        # The human's answer is authoritative and lives on the row — it is never
+        # rewritten by a scan. Serving it here keeps the confirmation loop working
+        # when the memory engine is slow or absent, which it can be in any
+        # deployment that does not run Recall.
+        usage = {
+            s.vendor_slug: s.usage
+            for s in await session.scalars(
+                _select(Subscription).where(
+                    Subscription.tenant_id == tenant_id, Subscription.usage.is_not(None)
+                )
+            )
+            if s.usage
+        }
     return LeakContext(
         mode=mode,
+        usage=usage,
         debits=[
             {
                 "id": t.id,

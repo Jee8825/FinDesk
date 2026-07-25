@@ -235,3 +235,55 @@ async def test_a_rename_for_an_unknown_slug_is_ignored():
     labels = {r["vendor_label"] for r in backend.persisted}
     assert "Ghost" not in labels
     assert all(r["vendor_slug"] != "vendor-that-does-not-exist" for r in backend.persisted)
+
+
+async def test_confirmed_usage_survives_a_dead_memory_service():
+    """Production readiness AND correctness: the human's answer lives on the row,
+    which a scan never rewrites. If it were only in Recall, a slow or absent
+    memory service would silently rescore a confirmed-unused subscription back
+    to zero recoverable while the row still read "confirmed unused"."""
+
+    class DeadMemory(MemoryClient):
+        def __init__(self):
+            self.called = False
+
+        async def recall_many(self, *, tenant_id, queries):
+            self.called = True
+            return {}  # memory engine up but empty, or effectively down
+
+        async def remember(self, **kw):
+            return False
+
+    class BackendWithUsage(FakeBackend):
+        async def leak_context(self, tenant_id):
+            ctx = await super().leak_context(tenant_id)
+            ctx["usage"] = {"gold-gym-elite": "unused"}
+            return ctx
+
+    debits = _debits("GOLD GYM ELITE", [299900] * 7, category="fitness")
+    backend = BackendWithUsage(debits, mode="personal")
+    memory = DeadMemory()
+    await leak_graph.run(
+        SubscriptionState(
+            tenant_id="t1", run_id="r1", emitter=FakeEmitter(),
+            backend=backend, memory=memory,
+        )
+    )
+    row = next(r for r in backend.persisted if r["vendor_slug"] == "gold-gym-elite")
+    assert row["usage"] == "unused"
+    assert row["recoverable_paise_per_year"] == 299900 * 12
+    assert memory.called, "memory is still consulted — it just is not the only source"
+
+
+async def test_memory_still_answers_for_vendors_the_row_has_not():
+    """The row wins where it has an answer; Recall fills the rest."""
+    debits = _debits("GOLD GYM ELITE", [299900] * 7, category="fitness")
+    backend = FakeBackend(debits, mode="personal")
+    await leak_graph.run(
+        SubscriptionState(
+            tenant_id="t1", run_id="r1", emitter=FakeEmitter(), backend=backend,
+            memory=FakeMemory({"gold-gym-elite": "The user no longer uses this service."}),
+        )
+    )
+    row = backend.persisted[0]
+    assert row["usage"] == "unused"

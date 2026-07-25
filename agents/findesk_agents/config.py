@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +41,20 @@ class Settings(BaseSettings):
     openrouter_light_model: str = "openai/gpt-oss-20b:free"
 
     otel_service_name: str = "findesk-agents"
+
+
+    @field_validator("backend_base_url", "recall_base_url")
+    @classmethod
+    def _needs_scheme(cls, value: str) -> str:
+        """Render exposes an internal service as `host:port`, with no scheme.
+
+        httpx requires one, and a bare host:port fails at client construction
+        rather than at first request — which reads as a crash loop, not a config
+        mistake. Default to http:// on the private network.
+        """
+        if value and "://" not in value:
+            return f"http://{value}"
+        return value
 
 
 @lru_cache

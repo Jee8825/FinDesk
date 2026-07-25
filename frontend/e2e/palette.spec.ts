@@ -14,7 +14,7 @@ test("palette opens with ctrl+k and navigates to Forecast", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Forecast" })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page).toHaveURL(/\/forecast/);
+  await expect(page).toHaveURL(/\/forecast/, { timeout: 20_000 });
 });
 
 test("palette finds a transaction and jumps to its Why? drawer", async ({ page }) => {
@@ -31,7 +31,8 @@ test("palette finds a transaction and jumps to its Why? drawer", async ({ page }
   await hit.click();
 
   // lands on /books?why=<id> and the provenance drawer opens
-  await expect(page).toHaveURL(/\/books\?why=/);
+  // see the note in ims.spec: full-suite load slows client-side navigation
+  await expect(page).toHaveURL(/\/books\?why=/, { timeout: 20_000 });
   await expect(page.getByText("Every figure answers Why?")).toBeVisible({ timeout: 10_000 });
 });
 

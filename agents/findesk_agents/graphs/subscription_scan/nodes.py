@@ -37,7 +37,11 @@ async def fetch(state: SubscriptionState) -> dict:
     await state.emitter.step(
         "fetch", "finished", step_id, debits=len(debits), mode=ctx["mode"]
     )
-    return {"debits": debits, "mode": ctx["mode"]}
+    return {
+        "debits": debits,
+        "mode": ctx["mode"],
+        "usage": ctx.get("usage") or {},
+    }
 
 
 async def canonicalize(state: SubscriptionState) -> dict:
@@ -160,6 +164,12 @@ async def recall_usage(state: SubscriptionState) -> dict:
     step_id = uuid7()
     await state.emitter.step("recall_usage", "started", step_id)
     slugs = sorted(state.cadences)
+    # Start from what the backend already told us. The row is the record of the
+    # human's answer; Recall adds decay and re-asking on top, and must never be
+    # the only place the answer lives — a slow memory service would otherwise
+    # silently rescore a confirmed-unused subscription back to zero recoverable.
+    usage: dict[str, str] = {k: v for k, v in state.usage.items() if k in state.cadences}
+    from_db = len(usage)
     recalled = await state.memory.recall_many(
         tenant_id=state.tenant_id,
         queries=[
@@ -167,8 +177,9 @@ async def recall_usage(state: SubscriptionState) -> dict:
             for slug in slugs
         ],
     )
-    usage: dict[str, str] = {}
     for slug in slugs:
+        if slug in usage:
+            continue  # the row already answered
         for m in recalled.get(f"vendor:{slug}", []):
             content = (m.get("content") or "").lower()
             if "no longer uses" in content or "confirmed unused" in content:
@@ -178,7 +189,13 @@ async def recall_usage(state: SubscriptionState) -> dict:
                 usage[slug] = "in_use"
                 break
     await state.emitter.step(
-        "recall_usage", "finished", step_id, known=len(usage), asked_about=len(slugs)
+        "recall_usage",
+        "finished",
+        step_id,
+        known=len(usage),
+        from_row=from_db,
+        from_memory=len(usage) - from_db,
+        asked_about=len(slugs),
     )
     return {"usage": usage}
 
