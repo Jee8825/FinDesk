@@ -10,8 +10,12 @@ setup("authenticate as seeded founder", async ({ page }) => {
   await page.locator("#password").fill("demo1234");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  // Successful login routes to the dashboard shell.
-  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible({
+  // Successful login routes to LeakRadar (the product surface a first-time
+  // visitor should meet). Asserting the app SHELL rather than a page heading
+  // keeps this fixture from breaking again the next time the landing page moves
+  // — every authenticated page renders the sidebar.
+  await expect(page.getByRole("navigation")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "LeakRadar" })).toBeVisible({
     timeout: 15_000,
   });
   await page.context().storageState({ path: AUTH_FILE });
